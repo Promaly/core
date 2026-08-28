@@ -12,6 +12,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate",
+    "db:check": "drizzle-kit check",
     "db:migrate": "tsx src/migrate.ts",
     "lint": "eslint src drizzle.config.ts",
     "test": "vitest run --passWithNoTests",
@@ -19,6 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
     "drizzle-orm": "^0.44.5",
     "postgres": "^3.4.7"
   },

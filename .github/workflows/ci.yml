@@ -23,6 +23,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check
+      - run: pnpm db:check
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
@@ -40,3 +41,15 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           outputs: type=cacheonly
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: promaly:ci
+      - uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: promaly:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
