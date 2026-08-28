@@ -1,0 +1,30 @@
+{
+  "name": "@promaly/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "lint": "eslint src",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@promaly/config": "workspace:*",
+    "@promaly/contracts": "workspace:*",
+    "@promaly/db": "workspace:*",
+    "@promaly/domain": "workspace:*",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/rate-limit": "^11.2.0",
+    "argon2": "^0.45.1",
+    "drizzle-orm": "^0.44.5",
+    "fastify": "^5.5.0",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.5",
+    "vitest": "^3.2.4"
+  }
+}

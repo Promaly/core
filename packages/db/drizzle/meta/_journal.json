@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1787918400000,
+      "tag": "0000_phase_0_system_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787929200000,
+      "tag": "0001_phase_1_identity_and_workspaces",
+      "breakpoints": true
+    }
+  ]
+}
