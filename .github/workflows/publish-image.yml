@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   publish:
@@ -20,7 +21,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v7
+      - id: build
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -28,3 +30,24 @@ jobs:
           tags: ghcr.io/promaly/promaly:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/promaly/promaly@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: promaly-${{ github.ref_name }}.spdx.json
+      - uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ghcr.io/promaly/promaly@${{ steps.build.outputs.digest }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+      - uses: sigstore/cosign-installer@v3
+      - run: cosign sign --yes ghcr.io/promaly/promaly@${{ steps.build.outputs.digest }}
+      - run: >-
+          cosign attest --yes --type spdxjson
+          --predicate promaly-${{ github.ref_name }}.spdx.json
+          ghcr.io/promaly/promaly@${{ steps.build.outputs.digest }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: promaly-${{ github.ref_name }}.spdx.json
