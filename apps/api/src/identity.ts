@@ -13,6 +13,10 @@ import {
 import { createWorkspaceSlug, normalizeEmail } from '@promaly/domain';
 
 const sessionDurationMs = 1000 * 60 * 60 * 24 * 30;
+const sessionLastSeenWriteIntervalMs = 1000 * 60 * 5;
+// This valid Argon2id hash is intentionally for a value no caller can authenticate with.
+const missingAccountPasswordHash =
+  '$argon2id$v=19$m=19456,p=1,t=2$pn87qjOfMYWvo/46XJdaRA$EEivLs+0OA317DRW3CTBCODzsfInAdFcekTUBvQ6VZE';
 
 export class AuthenticationError extends Error {}
 export class ConflictError extends Error {}
@@ -80,6 +84,7 @@ export function createIdentityService(database: DatabaseClient): IdentityService
         accountId: accounts.id,
         email: accounts.email,
         accountCreatedAt: accounts.createdAt,
+        lastSeenAt: authSessions.lastSeenAt,
       })
       .from(authSessions)
       .innerJoin(accounts, eq(accounts.id, authSessions.accountId))
@@ -97,10 +102,12 @@ export function createIdentityService(database: DatabaseClient): IdentityService
       return null;
     }
 
-    await db
-      .update(authSessions)
-      .set({ lastSeenAt: now })
-      .where(eq(authSessions.id, session.sessionId));
+    if (now.getTime() - session.lastSeenAt.getTime() >= sessionLastSeenWriteIntervalMs) {
+      await db
+        .update(authSessions)
+        .set({ lastSeenAt: now })
+        .where(eq(authSessions.id, session.sessionId));
+    }
 
     const memberships = await db
       .select({
@@ -203,7 +210,10 @@ export function createIdentityService(database: DatabaseClient): IdentityService
         .limit(1);
       const account = rows[0];
 
-      if (!account || !(await argon2.verify(account.passwordHash, input.password))) {
+      const passwordHash = account?.passwordHash ?? missingAccountPasswordHash;
+      const passwordMatches = await argon2.verify(passwordHash, input.password);
+
+      if (!account || !passwordMatches) {
         throw new AuthenticationError('Invalid email or password.');
       }
 

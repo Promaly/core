@@ -1,5 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import cookie from '@fastify/cookie';
+import csrfProtection from '@fastify/csrf-protection';
+import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import underPressure from '@fastify/under-pressure';
 import Fastify from 'fastify';
 import {
   authenticatedSessionSchema,
@@ -26,6 +30,36 @@ type AppDependencies = {
   readinessChecks: ReadinessChecks;
   identity: IdentityService | undefined;
 };
+
+export type MetricsState = {
+  startedAt: bigint;
+  requestCount: number;
+};
+
+export function createMetricsState(): MetricsState {
+  return { startedAt: process.hrtime.bigint(), requestCount: 0 };
+}
+
+function metricsBody(metrics: MetricsState) {
+  const uptimeSeconds = Number(process.hrtime.bigint() - metrics.startedAt) / 1_000_000_000;
+  return [
+    '# HELP promaly_process_uptime_seconds Time elapsed since the API process started.',
+    '# TYPE promaly_process_uptime_seconds gauge',
+    `promaly_process_uptime_seconds ${uptimeSeconds.toFixed(3)}`,
+    '# HELP promaly_http_requests_total Requests handled by this API process.',
+    '# TYPE promaly_http_requests_total counter',
+    `promaly_http_requests_total ${metrics.requestCount}`,
+    '',
+  ].join('\n');
+}
+
+export function buildMetricsApp(config: AppConfig, metrics = createMetricsState()) {
+  const app = Fastify({ logger: { level: config.logLevel } });
+  app.get('/metrics', async (_request, reply) =>
+    reply.type('text/plain; version=0.0.4; charset=utf-8').send(metricsBody(metrics)),
+  );
+  return app;
+}
 
 function createAppDependencies(config: AppConfig): AppDependencies {
   const database: DatabaseClient | undefined = config.databaseUrl
@@ -72,10 +106,24 @@ function requestMetadata(request: { ip: string; headers: { 'user-agent'?: string
   return metadata;
 }
 
-export function buildApp(config: AppConfig, dependencies = createAppDependencies(config)) {
-  const app = Fastify({ logger: { level: config.logLevel } });
-  const startedAt = process.hrtime.bigint();
-  let requestCount = 0;
+export function buildApp(
+  config: AppConfig,
+  dependencies = createAppDependencies(config),
+  metrics = createMetricsState(),
+) {
+  const app = Fastify({
+    logger: {
+      level: config.logLevel,
+      redact: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'res.headers.set-cookie',
+        '*.password',
+        '*.token',
+      ],
+    },
+    genReqId: () => randomUUID(),
+  });
   const sessionCookie = {
     httpOnly: true,
     sameSite: 'lax' as const,
@@ -83,12 +131,36 @@ export function buildApp(config: AppConfig, dependencies = createAppDependencies
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
   };
+  const requireCsrf = (
+    request: Parameters<typeof app.csrfProtection>[0],
+    reply: Parameters<typeof app.csrfProtection>[1],
+    done: Parameters<typeof app.csrfProtection>[2],
+  ) => app.csrfProtection(request, reply, done);
 
   void app.register(cookie);
+  void app.register(helmet, {
+    contentSecurityPolicy: { directives: { defaultSrc: ["'none'"] } },
+  });
+  void app.register(csrfProtection, {
+    cookieOpts: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: config.nodeEnv === 'production',
+      path: '/',
+    },
+    getToken: (request) => request.headers['x-csrf-token'] as string | undefined,
+  });
   void app.register(rateLimit, { global: false });
+  void app.register(underPressure, {
+    maxEventLoopDelay: 1_000,
+    maxHeapUsedBytes: 512 * 1024 * 1024,
+    maxRssBytes: 768 * 1024 * 1024,
+  });
 
-  app.addHook('onResponse', async () => {
-    requestCount += 1;
+  app.addHook('onResponse', async (request) => {
+    if (request.routeOptions.url !== '/metrics') {
+      metrics.requestCount += 1;
+    }
   });
   app.addHook('onClose', async () => {
     await dependencies.readinessChecks.close();
@@ -104,6 +176,9 @@ export function buildApp(config: AppConfig, dependencies = createAppDependencies
 
   app.get('/readyz', async (_request, reply) => {
     try {
+      if (app.isUnderPressure()) {
+        return reply.code(503).send({ status: 'not_ready', reason: 'Service is under pressure' });
+      }
       await dependencies.readinessChecks.database();
       await dependencies.readinessChecks.objectStorage();
       return { status: 'ready' };
@@ -113,9 +188,13 @@ export function buildApp(config: AppConfig, dependencies = createAppDependencies
     }
   });
 
+  app.get('/v1/auth/csrf', async (_request, reply) => {
+    return { csrfToken: reply.generateCsrf() };
+  });
+
   app.post(
     '/v1/auth/register',
-    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
+    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } }, onRequest: requireCsrf },
     async (request, reply) => {
       if (!dependencies.identity)
         return reply.code(503).send({ error: 'Identity is not configured.' });
@@ -138,7 +217,10 @@ export function buildApp(config: AppConfig, dependencies = createAppDependencies
 
   app.post(
     '/v1/auth/login',
-    { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } },
+    {
+      config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+      onRequest: requireCsrf,
+    },
     async (request, reply) => {
       if (!dependencies.identity)
         return reply.code(503).send({ error: 'Identity is not configured.' });
@@ -161,7 +243,7 @@ export function buildApp(config: AppConfig, dependencies = createAppDependencies
     },
   );
 
-  app.post('/v1/auth/logout', async (request, reply) => {
+  app.post('/v1/auth/logout', { onRequest: requireCsrf }, async (request, reply) => {
     const token = request.cookies.promaly_session;
     if (token && dependencies.identity) await dependencies.identity.logout(token);
     reply.clearCookie('promaly_session', { path: '/' });
@@ -174,20 +256,6 @@ export function buildApp(config: AppConfig, dependencies = createAppDependencies
       token && dependencies.identity ? await dependencies.identity.getSession(token) : null;
     if (!session) return reply.code(401).send({ error: 'Authentication is required.' });
     return authenticatedSessionSchema.parse(session);
-  });
-
-  app.get('/metrics', async (_request, reply) => {
-    const uptimeSeconds = Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
-    const body = [
-      '# HELP promaly_process_uptime_seconds Time elapsed since the API process started.',
-      '# TYPE promaly_process_uptime_seconds gauge',
-      `promaly_process_uptime_seconds ${uptimeSeconds.toFixed(3)}`,
-      '# HELP promaly_http_requests_total Requests handled by this API process.',
-      '# TYPE promaly_http_requests_total counter',
-      `promaly_http_requests_total ${requestCount}`,
-      '',
-    ].join('\n');
-    return reply.type('text/plain; version=0.0.4; charset=utf-8').send(body);
   });
 
   return app;

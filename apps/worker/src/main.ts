@@ -1,4 +1,5 @@
 import { loadConfig } from '@promaly/config';
+import { writeFile } from 'node:fs/promises';
 
 const config = loadConfig(process.env);
 
@@ -10,7 +11,17 @@ console.info(
   }),
 );
 
-process.once('SIGTERM', () => process.exit(0));
-process.once('SIGINT', () => process.exit(0));
+async function heartbeat() {
+  await writeFile('/tmp/promaly-worker.heartbeat', new Date().toISOString());
+}
 
-setInterval(() => undefined, 60_000);
+await heartbeat();
+const heartbeatInterval = setInterval(() => void heartbeat(), 15_000);
+
+function close() {
+  clearInterval(heartbeatInterval);
+  process.exit(0);
+}
+
+process.once('SIGTERM', close);
+process.once('SIGINT', close);
