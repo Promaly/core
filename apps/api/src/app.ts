@@ -19,6 +19,7 @@ import {
   createIdentityService,
   type IdentityService,
 } from './identity.js';
+import { createPrincipalPreHandler } from './principal.js';
 
 type ReadinessChecks = {
   database: () => Promise<void>;
@@ -162,6 +163,12 @@ export function buildApp(
     maxHeapUsedBytes: 512 * 1024 * 1024,
     maxRssBytes: 768 * 1024 * 1024,
   });
+
+  // Workspace authorization spine. Routes that operate inside a workspace add
+  // `app.requireWorkspace` (resolves `request.principal`) then a
+  // `requireCapability(...)` preHandler.
+  app.decorateRequest('principal', undefined);
+  app.decorate('requireWorkspace', createPrincipalPreHandler(dependencies.identity));
 
   app.addHook('onResponse', async (request) => {
     if (request.routeOptions.url !== '/metrics') {

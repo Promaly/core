@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { IdentityService } from './identity.js';
+import { requireCapability } from './principal.js';
 import { buildApp, buildMetricsApp, createMetricsState } from './app.js';
 
 const config = {
@@ -159,6 +160,27 @@ describe('identity endpoints', () => {
     const response = await app.inject({ method: 'GET', url: '/v1/auth/me' });
 
     expect(response.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('wires the workspace authorization spine onto the main app', async () => {
+    const app = buildTestApp(identity);
+    app.get(
+      '/_test/scoped',
+      { preHandler: [app.requireWorkspace, requireCapability('project.manage')] },
+      async (request) => request.principal,
+    );
+
+    const denied = await app.inject({ method: 'GET', url: '/_test/scoped' });
+    expect(denied.statusCode).toBe(400); // no X-Workspace-Id
+
+    const allowed = await app.inject({
+      method: 'GET',
+      url: '/_test/scoped',
+      headers: { cookie: 'promaly_session=t', 'x-workspace-id': session.workspaces[0]!.id },
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toMatchObject({ workspaceId: session.workspaces[0]!.id, role: 'owner' });
     await app.close();
   });
 });
