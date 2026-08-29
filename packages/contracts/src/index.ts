@@ -89,6 +89,149 @@ export const memberRoleUpdateRequestSchema = z.object({
   role: workspaceRoleSchema,
 });
 
+export const workflowStateCategorySchema = z.enum([
+  'backlog',
+  'unstarted',
+  'started',
+  'completed',
+  'cancelled',
+]);
+
+export const teamCreateRequestSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  key: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]{2,5}$/),
+});
+export const teamUpdateRequestSchema = teamCreateRequestSchema
+  .partial()
+  .refine(
+    (value) => value.name !== undefined || value.key !== undefined,
+    'At least one team field is required.',
+  );
+export const teamMemberRequestSchema = z.object({ accountId: z.uuid() });
+
+export const workflowCreateRequestSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  isDefault: z.boolean().optional(),
+});
+export const workflowUpdateRequestSchema = workflowCreateRequestSchema
+  .partial()
+  .refine(
+    (value) => value.name !== undefined || value.isDefault !== undefined,
+    'At least one workflow field is required.',
+  );
+export const workflowStateCreateRequestSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  category: workflowStateCategorySchema,
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/),
+});
+export const workflowStateUpdateRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+    color: z
+      .string()
+      .trim()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .optional(),
+  })
+  .refine(
+    (value) => value.name !== undefined || value.color !== undefined,
+    'State changes required.',
+  );
+export const workflowStateReorderRequestSchema = z.object({
+  stateIds: z.array(z.uuid()).min(2).max(100),
+});
+
+export const projectCreateRequestSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .regex(/^[A-Z][A-Z0-9]{1,9}$/),
+  name: z.string().trim().min(2).max(100),
+  description: z.string().max(20_000).optional(),
+  teamId: z.uuid().optional(),
+  leadId: z.uuid().optional(),
+  workflowId: z.uuid().optional(),
+  icon: z.string().trim().max(32).optional(),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
+});
+export const projectUpdateRequestSchema = projectCreateRequestSchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, 'Project changes required.');
+
+export const labelCreateRequestSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/),
+  projectId: z.uuid().optional(),
+});
+export const labelUpdateRequestSchema = labelCreateRequestSchema
+  .omit({ projectId: true })
+  .partial()
+  .refine(
+    (value) => value.name !== undefined || value.color !== undefined,
+    'Label changes required.',
+  );
+
+export const issuePrioritySchema = z.int().min(0).max(4);
+export const issueCreateRequestSchema = z.object({
+  projectId: z.uuid(),
+  title: z.string().trim().min(1).max(500),
+  description: z.string().max(100_000).optional(),
+  stateId: z.uuid().optional(),
+  priority: issuePrioritySchema.optional(),
+  assigneeId: z.uuid().nullable().optional(),
+  parentIssueId: z.uuid().nullable().optional(),
+  labelIds: z.array(z.uuid()).max(50).optional(),
+});
+export const issueUpdateRequestSchema = issueCreateRequestSchema
+  .omit({ projectId: true })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, 'Issue changes required.');
+export const issueArchiveRequestSchema = z.object({});
+export const issueRelationTypeSchema = z.enum(['blocks', 'relates_to', 'duplicates']);
+export const issueRelationCreateRequestSchema = z.object({
+  targetIssueId: z.uuid(),
+  type: issueRelationTypeSchema,
+});
+export const issueBulkRequestSchema = z.object({
+  issues: z
+    .array(
+      z.object({
+        id: z.uuid(),
+        revision: z.int().positive(),
+        stateId: z.uuid().optional(),
+        assigneeId: z.uuid().nullable().optional(),
+        priority: issuePrioritySchema.optional(),
+        labelIds: z.array(z.uuid()).max(50).optional(),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+export const issueMoveRequestSchema = z
+  .object({
+    beforeId: z.uuid().optional(),
+    afterId: z.uuid().optional(),
+    stateId: z.uuid().optional(),
+  })
+  .refine(
+    (value) =>
+      value.beforeId !== undefined || value.afterId !== undefined || value.stateId !== undefined,
+    'A destination is required.',
+  );
+
 export const phase1EventTypes = [
   'workspace.created',
   'workflow.seeded',
@@ -100,5 +243,25 @@ export const phase1EventTypes = [
   'membership.changed',
   'workspace.updated',
   'workspace.deleted',
+  'team.created',
+  'team.updated',
+  'team.deleted',
+  'team.members.changed',
+  'workflow.created',
+  'workflow.updated',
+  'workflow.state.changed',
+  'project.created',
+  'project.updated',
+  'project.archived',
+  'project.unarchived',
+  'label.created',
+  'label.updated',
+  'label.deleted',
+  'issue.created',
+  'issue.updated',
+  'issue.archived',
+  'issue.moved',
+  'issue.relation.created',
+  'issue.relation.deleted',
 ] as const;
 export type Phase1EventType = (typeof phase1EventTypes)[number];
