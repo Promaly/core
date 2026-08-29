@@ -70,6 +70,10 @@ function identityAs(role: CoreRole): IdentityService {
       token: { value: 't', expiresAt: new Date('2026-12-01') },
     }),
     login: async () => ({ ...session, token: { value: 't', expiresAt: new Date('2026-12-01') } }),
+    startSession: async () => ({
+      ...session,
+      token: { value: 't', expiresAt: new Date('2026-12-01') },
+    }),
     getSession: async (token) => (token ? sessionAs(role) : null),
     logout: async () => undefined,
     logoutAll: async () => undefined,
@@ -174,6 +178,10 @@ describe('identity endpoints', () => {
       token: { value: 'opaque-token', expiresAt: new Date('2026-09-28') },
     }),
     login: async () => ({
+      ...session,
+      token: { value: 'opaque-token', expiresAt: new Date('2026-09-28') },
+    }),
+    startSession: async () => ({
       ...session,
       token: { value: 'opaque-token', expiresAt: new Date('2026-09-28') },
     }),
@@ -344,6 +352,20 @@ describe('tenancy endpoints', () => {
       expect(response.statusCode).toBe(status);
       await app.close();
     }
+  });
+
+  it('logs the accepting account in on invitation acceptance', async () => {
+    const app = await buildTestApp(identityAs('member'), tenancyMock());
+    const { cookie, token } = await csrf(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/invitations/invite-token/accept',
+      headers: { cookie, 'x-csrf-token': token },
+      payload: { password: 'a-brand-new-password' },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.headers['set-cookie']).toContain('promaly_session=');
+    await app.close();
   });
 
   it('requires the X-Workspace-Id header on workspace-scoped routes', async () => {

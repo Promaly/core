@@ -15,6 +15,9 @@ function identity(role: 'owner' | 'admin' | 'member' | 'guest'): IdentityService
     login: async () => {
       throw new Error('not used');
     },
+    startSession: async () => {
+      throw new Error('not used');
+    },
     logout: async () => undefined,
     logoutAll: async () => undefined,
     requestPasswordReset: async () => undefined,

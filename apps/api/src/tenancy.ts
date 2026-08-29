@@ -6,16 +6,14 @@ import { createWorkspaceSlug, newId, normalizeEmail } from '@promaly/domain';
 import {
   accounts,
   auditEvents,
-  type DbTransaction,
   emit,
   type DatabaseClient,
   workspaceInvitations,
   workspaceMembers,
   workspaces,
-  workflowStates,
-  workflows,
 } from '@promaly/db';
 import { ConflictError } from './identity.js';
+import { provisionWorkspace } from './provisioning.js';
 
 const invitationDurationMs = 1000 * 60 * 60 * 24 * 7;
 
@@ -32,49 +30,6 @@ function hashToken(token: string) {
 
 function inviteToken() {
   return randomBytes(32).toString('base64url');
-}
-
-async function seedDefaultWorkflow(
-  transaction: DbTransaction,
-  workspaceId: string,
-  accountId: string,
-) {
-  const workflowId = newId();
-  await transaction.insert(workflows).values({
-    id: workflowId,
-    workspaceId,
-    name: 'Default workflow',
-    isDefault: true,
-    createdBy: accountId,
-  });
-  await transaction.insert(workflowStates).values([
-    {
-      id: newId(),
-      workflowId,
-      name: 'Backlog',
-      category: 'backlog',
-      position: 0,
-      color: '#6b7280',
-    },
-    { id: newId(), workflowId, name: 'Todo', category: 'unstarted', position: 1, color: '#94a3b8' },
-    {
-      id: newId(),
-      workflowId,
-      name: 'In progress',
-      category: 'started',
-      position: 2,
-      color: '#3b82f6',
-    },
-    { id: newId(), workflowId, name: 'Done', category: 'completed', position: 3, color: '#22c55e' },
-    {
-      id: newId(),
-      workflowId,
-      name: 'Cancelled',
-      category: 'cancelled',
-      position: 4,
-      color: '#ef4444',
-    },
-  ]);
 }
 
 export type TenancyService = ReturnType<typeof createTenancyService>;
@@ -103,38 +58,16 @@ export function createTenancyService(database: DatabaseClient) {
       const workspaceId = newId();
       const slug = input.slug ?? createWorkspaceSlug(input.name);
       try {
-        await db.transaction(async (transaction) => {
-          await transaction.insert(workspaces).values({
-            id: workspaceId,
+        await db.transaction((transaction) =>
+          provisionWorkspace(transaction, {
+            workspaceId,
+            ownerId: accountId,
             name: input.name.trim(),
             slug,
-            createdBy: accountId,
-          });
-          await transaction.insert(workspaceMembers).values({
-            workspaceId,
-            accountId,
-            role: 'owner',
-          });
-          await seedDefaultWorkflow(transaction, workspaceId, accountId);
-          await transaction.insert(auditEvents).values({
-            id: newId(),
-            workspaceId,
-            actorId: accountId,
-            action: 'workspace.created',
-            targetType: 'workspace',
-            targetId: workspaceId,
-            metadata: { source: 'workspace-management' },
+            source: 'workspace-management',
             ipAddress: metadata.ipAddress,
-          });
-          await emit(transaction, {
-            id: newId(),
-            workspaceId,
-            aggregateType: 'workspace',
-            aggregateId: workspaceId,
-            type: 'workspace.created',
-            payload: { accountId },
-          });
-        });
+          }),
+        );
       } catch (error) {
         if (
           typeof error === 'object' &&
@@ -350,6 +283,27 @@ export function createTenancyService(database: DatabaseClient) {
       const token = inviteToken();
       const invitation = { id: newId(), expiresAt: new Date(Date.now() + invitationDurationMs) };
       await db.transaction(async (transaction) => {
+        const member = (
+          await transaction
+            .select({ id: workspaceMembers.accountId })
+            .from(workspaceMembers)
+            .innerJoin(accounts, eq(accounts.id, workspaceMembers.accountId))
+            .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(accounts.email, email)))
+            .limit(1)
+        )[0];
+        if (member) {
+          throw new ConflictError('That person is already a member of this workspace.');
+        }
+        // A re-invite supersedes any earlier pending one (its token stops working).
+        await transaction
+          .delete(workspaceInvitations)
+          .where(
+            and(
+              eq(workspaceInvitations.workspaceId, workspaceId),
+              eq(workspaceInvitations.email, email),
+              isNull(workspaceInvitations.acceptedAt),
+            ),
+          );
         await transaction.insert(workspaceInvitations).values({
           ...invitation,
           workspaceId,

@@ -278,7 +278,11 @@ export async function buildApp(
       if (!input.success) return reply.code(400).send({ error: 'Invalid login input.' });
 
       try {
-        const result = await dependencies.identity.login(input.data, requestMetadata(request));
+        const result = await dependencies.identity.login(
+          input.data,
+          requestMetadata(request),
+          request.cookies.promaly_session,
+        );
         reply.setCookie('promaly_session', result.token.value, {
           ...sessionCookie,
           expires: result.token.expiresAt,
@@ -483,19 +487,26 @@ export async function buildApp(
     const token = (request.params as { token?: string }).token;
     if (!input.success || !token)
       return reply.code(400).send({ error: 'Invalid invitation acceptance input.' });
-    if (!dependencies.tenancy) return reply.code(503).send({ error: 'Tenancy is not configured.' });
+    if (!dependencies.tenancy || !dependencies.identity)
+      return reply.code(503).send({ error: 'Tenancy is not configured.' });
     const session = await currentSession(request);
     try {
-      return reply
-        .code(201)
-        .send(
-          await dependencies.tenancy.acceptInvitation(
-            token,
-            session?.account.id,
-            input.data.password,
-            requestMetadata(request),
-          ),
-        );
+      const result = await dependencies.tenancy.acceptInvitation(
+        token,
+        session?.account.id,
+        input.data.password,
+        requestMetadata(request),
+      );
+      // Log the accepting account in (new or existing) so it lands inside the workspace.
+      const authed = await dependencies.identity.startSession(
+        result.accountId,
+        requestMetadata(request),
+      );
+      reply.setCookie('promaly_session', authed.token.value, {
+        ...sessionCookie,
+        expires: authed.token.expiresAt,
+      });
+      return reply.code(201).send(authenticatedSessionSchema.parse(authed));
     } catch (error) {
       return tenancyFailure(error, reply);
     }
