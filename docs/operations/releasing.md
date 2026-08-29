@@ -2,6 +2,15 @@
 
 Promaly uses Conventional Commits. Pull requests are rejected when their commits do not conform to the configured convention. On `main` and `beta`, semantic-release determines the next semantic version from those commits, publishes GitHub release notes and creates the corresponding release tag. Published container images are signed with Cosign. The publish workflow attaches an SPDX SBOM attestation and blocks releases when Trivy finds HIGH or CRITICAL vulnerabilities (except documented `.trivyignore` entries).
 
+## Versioning
+
+Promaly Core is pre-1.0 and stays on the `0.x` line until Core is declared stable.
+`@semantic-release/commit-analyzer` is configured so a `BREAKING CHANGE` bumps the
+**minor** version (`0.1.0` → `0.2.0`), not the major. The jump to `1.0.0` is a
+deliberate manual step: create and push the `v1.0.0` tag and its GitHub release by
+hand, then remove the `releaseRules` override so breaking changes resume bumping
+the major.
+
 ## Release channels
 
 - Stable: signed tags such as `v0.1.0`.
