@@ -49,17 +49,24 @@ jobs:
           tags: promaly:release-candidate
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: aquasecurity/trivy-action@v0.33.1
-        env:
-          # Authenticate Trivy's binary/DB downloads to avoid anonymous rate limits.
-          GITHUB_TOKEN: ${{ github.token }}
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
-        with:
-          image-ref: promaly:release-candidate
-          format: table
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH
+      # Run Trivy as a container from the AWS ECR public mirror — no GitHub-API
+      # binary lookup and no Docker Hub pull, both of which are rate-limited and
+      # made `aquasecurity/trivy-action` flaky here. Fails the release on an
+      # unpatched CRITICAL/HIGH in the built image.
+      - name: Scan image for vulnerabilities
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${{ runner.temp }}/trivy-cache:/root/.cache/trivy" \
+            -e TRIVY_DB_REPOSITORY=public.ecr.aws/aquasecurity/trivy-db \
+            -e GITHUB_TOKEN='${{ github.token }}' \
+            public.ecr.aws/aquasecurity/trivy:0.65.0 \
+            image \
+              --scanners vuln \
+              --severity CRITICAL,HIGH \
+              --ignore-unfixed \
+              --exit-code 1 \
+              promaly:release-candidate
       - id: publish
         uses: docker/build-push-action@v7
         with:
