@@ -1,0 +1,17 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Promaly API", "version": "v1" },
+  "paths": {
+    "/v1/auth/csrf": { "get": { "responses": { "200": { "description": "CSRF token" } } } },
+    "/v1/auth/register": {
+      "post": { "responses": { "201": { "description": "Authenticated session" } } }
+    },
+    "/v1/auth/login": {
+      "post": { "responses": { "200": { "description": "Authenticated session" } } }
+    },
+    "/v1/auth/me": {
+      "get": { "responses": { "200": { "description": "Authenticated session" } } }
+    },
+    "/v1/workspaces": { "post": { "responses": { "201": { "description": "Workspace created" } } } }
+  }
+}

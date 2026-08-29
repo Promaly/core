@@ -1,0 +1,111 @@
+:root {
+  color-scheme: light;
+  --pm-bg: #f8fafc;
+  --pm-surface: #fff;
+  --pm-muted: #f1f5f9;
+  --pm-text: #172033;
+  --pm-text-muted: #64748b;
+  --pm-border: #dbe3ee;
+  --pm-primary: #3659d9;
+  --pm-primary-contrast: #fff;
+  --pm-focus: #7596ff;
+  --pm-radius: 10px;
+  --pm-shadow: 0 10px 28px rgb(23 32 51 / 10%);
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --pm-bg: #111827;
+  --pm-surface: #172033;
+  --pm-muted: #202c42;
+  --pm-text: #e5edf9;
+  --pm-text-muted: #a5b4ca;
+  --pm-border: #334155;
+  --pm-primary: #8da6ff;
+  --pm-primary-contrast: #111827;
+  --pm-focus: #b5c4ff;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--pm-bg);
+  color: var(--pm-text);
+  font:
+    14px/1.45 Inter,
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+button,
+input,
+textarea {
+  font: inherit;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--pm-focus);
+  outline-offset: 2px;
+}
+.pm-button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 650;
+}
+.pm-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.pm-button--primary {
+  background: var(--pm-primary);
+  color: var(--pm-primary-contrast);
+}
+.pm-button--secondary {
+  background: var(--pm-surface);
+  border-color: var(--pm-border);
+  color: var(--pm-text);
+}
+.pm-button--ghost {
+  background: transparent;
+  color: var(--pm-text);
+}
+.pm-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--pm-border);
+  border-radius: 8px;
+  background: var(--pm-surface);
+  color: var(--pm-text);
+}
+.pm-textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+.pm-badge {
+  display: inline-flex;
+  border-radius: 999px;
+  background: var(--pm-muted);
+  color: var(--pm-text-muted);
+  font-size: 12px;
+  padding: 2px 8px;
+}
+.pm-kbd {
+  border: 1px solid var(--pm-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--pm-surface);
+  padding: 1px 5px;
+  font:
+    11px ui-monospace,
+    monospace;
+}
+.pm-combobox {
+  display: grid;
+  gap: 5px;
+  color: var(--pm-text-muted);
+}
