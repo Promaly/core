@@ -5,7 +5,7 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: read
+  contents: write
   packages: write
   id-token: write
 
@@ -56,6 +56,16 @@ jobs:
           cosign attest --yes --type spdxjson
           --predicate promaly-${{ github.ref_name }}.spdx.json
           ghcr.io/promaly/promaly@${{ steps.publish.outputs.digest }}
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: promaly-${{ github.ref_name }}.spdx.json
+      - name: Attach SBOM to the semantic-release release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in {1..30}; do
+            if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+              gh release upload "${{ github.ref_name }}" "promaly-${{ github.ref_name }}.spdx.json" --clobber
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "semantic-release did not create a GitHub release for ${{ github.ref_name }}" >&2
+          exit 1
