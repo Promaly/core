@@ -12,7 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@promaly/config": "workspace:*"
+    "@promaly/config": "workspace:*",
+    "@promaly/db": "workspace:*",
+    "@promaly/domain": "workspace:*",
+    "pg-boss": "^12.28.0"
   },
   "devDependencies": {
     "tsx": "^4.20.5",

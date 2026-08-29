@@ -11,6 +11,9 @@ services:
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${PROMALY_S3_BUCKET:-promaly}
       S3_REGION: ${S3_REGION:-us-east-1}
+      SMTP_URL: ${SMTP_URL:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      WORKER_HEALTH_PORT: 8081
       # Kept off the host; available only to services on the Compose network.
       METRICS_HOST: 0.0.0.0
       METRICS_PORT: 9090
@@ -54,6 +57,9 @@ services:
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${PROMALY_S3_BUCKET:-promaly}
       S3_REGION: ${S3_REGION:-us-east-1}
+      SMTP_URL: ${SMTP_URL:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      WORKER_HEALTH_PORT: 8081
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       migrate:
@@ -64,7 +70,11 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
-      test: ['CMD-SHELL', 'test -n "$$(find /tmp/promaly-worker.heartbeat -mmin -1 -print -quit)"']
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:8081/healthz\").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3

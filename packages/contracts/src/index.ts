@@ -49,3 +49,11 @@ export const authenticatedSessionSchema = z.object({
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type AuthenticatedSession = z.infer<typeof authenticatedSessionSchema>;
+
+export const phase1EventTypes = [
+  'workspace.created',
+  'workflow.seeded',
+  'notification.fanout',
+  'email.send',
+] as const;
+export type Phase1EventType = (typeof phase1EventTypes)[number];

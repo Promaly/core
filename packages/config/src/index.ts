@@ -15,6 +15,9 @@ const configSchema = z.object({
   S3_ENDPOINT: z.string().url().optional(),
   S3_BUCKET: z.string().min(1).default('promaly'),
   S3_REGION: z.string().min(1).default('us-east-1'),
+  SMTP_URL: z.string().url().optional(),
+  SMTP_FROM: z.email().optional(),
+  WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(8081),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_SERVICE_NAME: z.string().min(1).default('promaly-api'),
   OTEL_TRACES_ENABLED: z
@@ -36,6 +39,9 @@ export type AppConfig = {
   s3Endpoint: string | undefined;
   s3Bucket: string;
   s3Region: string;
+  smtpUrl: string | undefined;
+  smtpFrom: string | undefined;
+  workerHealthPort: number;
   otelExporterOtlpEndpoint: string | undefined;
   otelServiceName: string;
   otelTracesEnabled: boolean;
@@ -61,6 +67,9 @@ export function loadConfig(environment: Record<string, string | undefined>): App
     s3Endpoint: result.data.S3_ENDPOINT,
     s3Bucket: result.data.S3_BUCKET,
     s3Region: result.data.S3_REGION,
+    smtpUrl: result.data.SMTP_URL,
+    smtpFrom: result.data.SMTP_FROM,
+    workerHealthPort: result.data.WORKER_HEALTH_PORT,
     otelExporterOtlpEndpoint: result.data.OTEL_EXPORTER_OTLP_ENDPOINT,
     otelServiceName: result.data.OTEL_SERVICE_NAME,
     otelTracesEnabled: result.data.OTEL_TRACES_ENABLED,

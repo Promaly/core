@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import argon2 from 'argon2';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import type { AuthenticatedSession, LoginRequest, RegisterRequest } from '@promaly/contracts';
@@ -6,11 +6,14 @@ import {
   accounts,
   auditEvents,
   authSessions,
+  emit,
   type DatabaseClient,
+  workflowStates,
+  workflows,
   workspaceMembers,
   workspaces,
 } from '@promaly/db';
-import { createWorkspaceSlug, normalizeEmail } from '@promaly/domain';
+import { createWorkspaceSlug, newId, normalizeEmail } from '@promaly/domain';
 
 const sessionDurationMs = 1000 * 60 * 60 * 24 * 30;
 const sessionLastSeenWriteIntervalMs = 1000 * 60 * 5;
@@ -65,7 +68,7 @@ export function createIdentityService(database: DatabaseClient): IdentityService
   async function createSession(accountId: string, metadata: RequestMetadata) {
     const token = createSessionToken();
     await db.insert(authSessions).values({
-      id: randomUUID(),
+      id: newId(),
       accountId,
       tokenHash: hashSessionToken(token.value),
       expiresAt: token.expiresAt,
@@ -144,8 +147,9 @@ export function createIdentityService(database: DatabaseClient): IdentityService
         throw new ConflictError('An account already exists for this email address.');
       }
 
-      const accountId = randomUUID();
-      const workspaceId = randomUUID();
+      const accountId = newId();
+      const workspaceId = newId();
+      const workflowId = newId();
       const passwordHash = await argon2.hash(input.password, {
         type: argon2.argon2id,
         memoryCost: 19_456,
@@ -167,8 +171,57 @@ export function createIdentityService(database: DatabaseClient): IdentityService
             accountId,
             role: 'owner',
           });
+          await transaction.insert(workflows).values({
+            id: workflowId,
+            workspaceId,
+            name: 'Default workflow',
+            isDefault: true,
+            createdBy: accountId,
+          });
+          await transaction.insert(workflowStates).values([
+            {
+              id: newId(),
+              workflowId,
+              name: 'Backlog',
+              category: 'backlog',
+              position: 0,
+              color: '#6b7280',
+            },
+            {
+              id: newId(),
+              workflowId,
+              name: 'Todo',
+              category: 'unstarted',
+              position: 1,
+              color: '#94a3b8',
+            },
+            {
+              id: newId(),
+              workflowId,
+              name: 'In progress',
+              category: 'started',
+              position: 2,
+              color: '#3b82f6',
+            },
+            {
+              id: newId(),
+              workflowId,
+              name: 'Done',
+              category: 'completed',
+              position: 3,
+              color: '#22c55e',
+            },
+            {
+              id: newId(),
+              workflowId,
+              name: 'Cancelled',
+              category: 'cancelled',
+              position: 4,
+              color: '#ef4444',
+            },
+          ]);
           await transaction.insert(auditEvents).values({
-            id: randomUUID(),
+            id: newId(),
             workspaceId,
             actorId: accountId,
             action: 'workspace.created',
@@ -176,6 +229,14 @@ export function createIdentityService(database: DatabaseClient): IdentityService
             targetId: workspaceId,
             metadata: { source: 'registration' },
             ipAddress: metadata.ipAddress,
+          });
+          await emit(transaction, {
+            id: newId(),
+            workspaceId,
+            aggregateType: 'workspace',
+            aggregateId: workspaceId,
+            type: 'workspace.created',
+            payload: { accountId },
           });
         });
       } catch (error) {
