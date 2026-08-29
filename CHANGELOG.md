@@ -1,3 +1,10 @@
+## [0.7.3](https://github.com/Promaly/core/compare/v0.7.2...v0.7.3) (2026-08-29)
+
+
+### Bug Fixes
+
+* **db:** create the promaly_app role from the migrate step, not initdb.d ([bf51c76](https://github.com/Promaly/core/commit/bf51c76a56e6607fddc67c0aefa83aabde83248f))
+
 ## [0.7.2](https://github.com/Promaly/core/compare/v0.7.1...v0.7.2) (2026-08-29)
 
 
