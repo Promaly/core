@@ -63,7 +63,6 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - promaly-secrets:/run/promaly:ro
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -110,7 +109,10 @@ services:
           memory: 512M
     logging: *logging
 
-  # Applies migrations, then exits. The API and worker wait for it.
+  # Creates the least-privilege `promaly_app` role, applies migrations, then
+  # exits. The API and worker wait for it. Runs as the database owner and does
+  # the role setup itself, so no `docker-entrypoint-initdb.d` bind mount is
+  # needed — some platforms (Coolify, Portainer stacks) don't mount repo paths.
   migrate:
     <<: *promaly-image
     command:
@@ -118,6 +120,7 @@ services:
       - -ec
       - |
         export MIGRATION_DATABASE_URL="postgres://promaly:$$(cat /run/promaly/db_owner_password)@postgres:5432/promaly"
+        export PROMALY_APP_PASSWORD="$$(cat /run/promaly/db_app_password)"
         exec node packages/db/dist/migrate.js
     volumes:
       - promaly-secrets:/run/promaly:ro

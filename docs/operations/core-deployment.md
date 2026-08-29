@@ -8,9 +8,9 @@ docker compose up -d
 
 That is the whole install. No `.env`, no secrets to set.
 
-**Credentials.** The one-shot `bootstrap` service generates the PostgreSQL and MinIO passwords on first run into the `promaly-secrets` volume and never overwrites them. They are not in `compose.yaml`, in `docker inspect`, or in git. Every service reads them from files at start — `POSTGRES_PASSWORD_FILE` / `MINIO_ROOT_PASSWORD_FILE` for the stores, a small shell wrapper that builds `DATABASE_URL` for the API and worker. Back up the `promaly-secrets` volume alongside the database.
+**Credentials.** The one-shot `bootstrap` service generates the PostgreSQL and MinIO passwords on first run into the `promaly-secrets` volume and never overwrites them. They are not in `compose.yaml`, in `docker inspect`, or in git. Every service reads them from files at start through a small shell wrapper — the stores get `POSTGRES_PASSWORD` / `MINIO_ROOT_PASSWORD` set from the files (any value a hosting platform injects is overwritten), and the API and worker build their `DATABASE_URL` the same way. Back up the `promaly-secrets` volume alongside the database.
 
-**Startup order.** `bootstrap` → `postgres` + `minio` → `migrate` (owner role, applies migrations) and `createbuckets` → `app` + `worker` (restricted `promaly_app` role, DML only). Compose enforces this with health and completion conditions.
+**Startup order.** `bootstrap` → `postgres` + `minio` → `migrate` (connects as the owner role, creates the restricted `promaly_app` role, applies migrations) and `createbuckets` → `app` + `worker` (`promaly_app`, DML only). Compose enforces this with health and completion conditions. The `migrate` step is idempotent — re-running it repairs the role and grants, so a redeploy fixes a database left half-initialised by an earlier failed attempt.
 
 **First admin.** Open the app and register — the first account owns the first workspace.
 
