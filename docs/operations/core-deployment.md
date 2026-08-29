@@ -16,6 +16,8 @@ That is the whole install. No `.env`, no secrets to set.
 
 **Overrides.** `.env` is optional and carries only operator choices: `PROMALY_PORT`, `SMTP_URL` / `SMTP_FROM`, `LOG_LEVEL`, `METRICS_TOKEN`, and `PROMALY_IMAGE` / `PROMALY_VERSION` to run a published release instead of building from this checkout. See `.env.example`. Metrics bind to the Compose network but are never published to the host; set `METRICS_TOKEN` before a sidecar scrapes them. Validate through `https://your-promaly-host/readyz`.
 
+**Published images.** Every tagged release publishes a multi-arch image to `ghcr.io/promaly/promaly`, tagged `vX.Y.Z` and `latest`, signed with cosign and carrying an SBOM attestation. Set `PROMALY_IMAGE=ghcr.io/promaly/promaly` and `PROMALY_VERSION=latest` (or a pinned tag) in `.env` to pull instead of build — useful on platforms that don't build from a checkout. The GHCR package is public; no registry login is needed to pull.
+
 ## Upgrade and rollback
 
 From a source checkout: `git pull` then `docker compose up -d --build`. Running a

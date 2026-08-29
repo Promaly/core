@@ -11,6 +11,15 @@ export default {
       },
     ],
     '@semantic-release/release-notes-generator',
+    [
+      // Expose the version to the release workflow so it can invoke the image
+      // publish — a GITHUB_TOKEN-pushed tag does not trigger `on: push`. This
+      // step runs only when a release is happening.
+      '@semantic-release/exec',
+      {
+        verifyReleaseCmd: './scripts/emit-release-version.sh "${nextRelease.version}"',
+      },
+    ],
     '@semantic-release/changelog',
     [
       '@semantic-release/git',

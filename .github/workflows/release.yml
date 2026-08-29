@@ -12,6 +12,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    outputs:
+      # Set by the @semantic-release/exec plugin only when a version was cut.
+      version: ${{ steps.semantic-release.outputs.version }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -24,6 +27,22 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec semantic-release
+      - id: semantic-release
+        run: pnpm exec semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # semantic-release pushes the tag with GITHUB_TOKEN, which does not trigger
+  # `on: push` workflows — so the image publish is invoked here instead, only
+  # when a new version was actually released.
+  publish-image:
+    needs: release
+    if: needs.release.outputs.version != ''
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/publish-image.yml
+    with:
+      tag: v${{ needs.release.outputs.version }}
+    secrets: inherit
