@@ -54,7 +54,9 @@ function metricsBody(metrics: MetricsState) {
 }
 
 export function buildMetricsApp(config: AppConfig, metrics = createMetricsState()) {
-  const app = Fastify({ logger: { level: config.logLevel } });
+  const app = Fastify({
+    logger: { level: config.logLevel, redact: ['req.headers.authorization'] },
+  });
   app.get('/metrics', async (request, reply) => {
     if (config.metricsToken && request.headers.authorization !== `Bearer ${config.metricsToken}`) {
       return reply.code(401).send({ error: 'Metrics authentication is required.' });
