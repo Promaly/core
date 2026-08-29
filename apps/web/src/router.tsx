@@ -5,10 +5,13 @@ import {
   Link,
   Outlet,
   useNavigate,
+  useParams,
+  useRouterState,
 } from '@tanstack/react-router';
 import { Command } from 'cmdk';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Badge, Button, Dialog, Input, Kbd } from '@promaly/ui';
+import { authApi, type Session } from './api.js';
 
 const navigation = [
   { to: '/', label: 'Projects' },
@@ -23,6 +26,24 @@ function Shell() {
     localStorage.getItem('theme') === 'dark' ? 'dark' : 'light',
   );
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const publicRoute =
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname === '/reset' ||
+    pathname.startsWith('/reset/') ||
+    pathname.startsWith('/invites/');
+  useEffect(() => {
+    if (publicRoute) return;
+    void authApi
+      .session()
+      .then(setSession)
+      .catch(() => {
+        setSession(null);
+        void navigate({ to: '/login' });
+      });
+  }, [navigate, publicRoute]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('theme', theme);
@@ -41,6 +62,7 @@ function Shell() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [navigate]);
+  if (!publicRoute && session === undefined) return <main className="auth">Checking session…</main>;
   return (
     <div className="app-shell">
       <aside>
@@ -48,7 +70,7 @@ function Shell() {
           Promaly
         </Link>
         <button className="workspace" aria-label="Switch workspace">
-          Acme ⌄
+          {session?.workspaces[0]?.name ?? 'Workspace'} ⌄
         </button>
         <nav aria-label="Main navigation">
           {navigation.map((item) => (
@@ -132,15 +154,18 @@ function AuthPage({
   title,
   children,
   onSubmit,
+  error,
 }: {
   title: string;
   children: ReactNode;
-  onSubmit?: (event: FormEvent) => void;
+  onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
+  error?: string | undefined;
 }) {
   return (
     <main className="auth">
-      <form onSubmit={onSubmit}>
+      <form onSubmit={onSubmit} noValidate>
         <h1>{title}</h1>
+        {error && <p role="alert">{error}</p>}
         {children}
       </form>
     </main>
@@ -148,21 +173,29 @@ function AuthPage({
 }
 function Login() {
   const navigate = useNavigate();
+  const [error, setError] = useState<string>();
   return (
     <AuthPage
       title="Welcome back"
       onSubmit={(event) => {
         event.preventDefault();
-        void navigate({ to: '/' });
+        const values = new FormData(event.currentTarget);
+        void authApi
+          .login(String(values.get('email')), String(values.get('password')))
+          .then(() => navigate({ to: '/' }))
+          .catch((reason: unknown) =>
+            setError(reason instanceof Error ? reason.message : 'Unable to log in.'),
+          );
       }}
+      error={error}
     >
       <label>
         Email
-        <Input type="email" required />
+        <Input name="email" type="email" required />
       </label>
       <label>
         Password
-        <Input type="password" required />
+        <Input name="password" type="password" required />
       </label>
       <Button type="submit">Log in</Button>
       <Link to="/reset">Forgot password?</Link>
@@ -171,21 +204,37 @@ function Login() {
 }
 function Register() {
   const navigate = useNavigate();
+  const [error, setError] = useState<string>();
   return (
     <AuthPage
       title="Create your account"
       onSubmit={(event) => {
         event.preventDefault();
-        void navigate({ to: '/onboarding' });
+        const values = new FormData(event.currentTarget);
+        void authApi
+          .register(
+            String(values.get('email')),
+            String(values.get('password')),
+            String(values.get('workspaceName')),
+          )
+          .then(() => navigate({ to: '/' }))
+          .catch((reason: unknown) =>
+            setError(reason instanceof Error ? reason.message : 'Unable to register.'),
+          );
       }}
+      error={error}
     >
       <label>
         Work email
-        <Input type="email" required />
+        <Input name="email" type="email" required />
       </label>
       <label>
         Password
-        <Input type="password" minLength={12} required />
+        <Input name="password" type="password" minLength={12} required />
+      </label>
+      <label>
+        Workspace name
+        <Input name="workspaceName" required minLength={2} />
       </label>
       <Button type="submit">Create account</Button>
       <Link to="/login">Log in</Link>
@@ -193,40 +242,107 @@ function Register() {
   );
 }
 function Reset() {
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string>();
   return (
-    <AuthPage title="Reset your password">
+    <AuthPage
+      title="Reset your password"
+      error={error}
+      onSubmit={(event) => {
+        event.preventDefault();
+        const email = String(new FormData(event.currentTarget).get('email'));
+        void authApi
+          .requestReset(email)
+          .then(() => setSent(true))
+          .catch((reason: unknown) =>
+            setError(reason instanceof Error ? reason.message : 'Unable to request a reset.'),
+          );
+      }}
+    >
       <label>
         Email
-        <Input type="email" required />
+        <Input name="email" type="email" required />
       </label>
       <Button type="submit">Send reset link</Button>
+      {sent && <p role="status">If that account exists, a reset link is on its way.</p>}
     </AuthPage>
   );
 }
 function Invite() {
+  const { token } = useParams({ strict: false }) as { token: string };
+  const navigate = useNavigate();
+  const [error, setError] = useState<string>();
   return (
-    <AuthPage title="Join workspace">
+    <AuthPage
+      title="Join workspace"
+      error={error}
+      onSubmit={(event) => {
+        event.preventDefault();
+        const password = String(new FormData(event.currentTarget).get('password') ?? '');
+        void authApi
+          .acceptInvite(token, password)
+          .then(() => navigate({ to: '/' }))
+          .catch((reason: unknown) =>
+            setError(reason instanceof Error ? reason.message : 'Unable to accept invite.'),
+          );
+      }}
+    >
       <label>
         Password
-        <Input type="password" minLength={12} />
+        <Input name="password" type="password" minLength={12} />
       </label>
       <Button type="submit">Accept invite</Button>
     </AuthPage>
   );
 }
+function ResetConfirm() {
+  const { token } = useParams({ strict: false }) as { token: string };
+  const navigate = useNavigate();
+  const [error, setError] = useState<string>();
+  return (
+    <AuthPage
+      title="Choose a new password"
+      error={error}
+      onSubmit={(event) => {
+        event.preventDefault();
+        const password = String(new FormData(event.currentTarget).get('password'));
+        void authApi
+          .confirmReset(token, password)
+          .then(() => navigate({ to: '/login' }))
+          .catch((reason: unknown) =>
+            setError(reason instanceof Error ? reason.message : 'Unable to reset password.'),
+          );
+      }}
+    >
+      <label>
+        New password
+        <Input name="password" type="password" minLength={12} required />
+      </label>
+      <Button type="submit">Reset password</Button>
+    </AuthPage>
+  );
+}
 function Onboarding() {
   const navigate = useNavigate();
+  const [error, setError] = useState<string>();
   return (
     <AuthPage
       title="Create your workspace"
       onSubmit={(event) => {
         event.preventDefault();
-        void navigate({ to: '/' });
+        const name = String(new FormData(event.currentTarget).get('name'));
+        void authApi
+          .createWorkspace(name)
+          .then(() => navigate({ to: '/' }))
+          .catch((reason: unknown) =>
+            setError(reason instanceof Error ? reason.message : 'Unable to create workspace.'),
+          );
       }}
+      error={error}
     >
       <label>
         Workspace name
-        <Input required />
+        <Input name="name" required />
       </label>
       <Button type="submit">Create workspace</Button>
     </AuthPage>
@@ -259,6 +375,7 @@ const routes = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: '/login', component: Login }),
   createRoute({ getParentRoute: () => rootRoute, path: '/register', component: Register }),
   createRoute({ getParentRoute: () => rootRoute, path: '/reset', component: Reset }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/reset/$token', component: ResetConfirm }),
   createRoute({ getParentRoute: () => rootRoute, path: '/invites/$token', component: Invite }),
   createRoute({ getParentRoute: () => rootRoute, path: '/onboarding', component: Onboarding }),
 ]);

@@ -10,7 +10,7 @@
     }
   },
   "scripts": {
-    "generate": "openapi-typescript openapi.json -o src/generated.ts",
+    "generate": "openapi-typescript openapi.json -o src/generated.ts && prettier --write src/generated.ts",
     "check:generated": "pnpm run generate && git diff --exit-code -- src/generated.ts",
     "build": "pnpm run check:generated && tsc -p tsconfig.json",
     "lint": "eslint src",
