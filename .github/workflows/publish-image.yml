@@ -29,7 +29,7 @@ jobs:
           tags: promaly:release-candidate
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: aquasecurity/trivy-action@0.33.1
+      - uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: promaly:release-candidate
           format: table
