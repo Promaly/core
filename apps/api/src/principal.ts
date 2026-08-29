@@ -14,6 +14,10 @@ declare module 'fastify' {
   interface FastifyRequest {
     principal: Principal | undefined;
   }
+  interface FastifyInstance {
+    /** preHandler that resolves `request.principal` from the session + X-Workspace-Id. */
+    requireWorkspace: preHandlerHookHandler;
+  }
 }
 
 function workspaceHeader(request: FastifyRequest) {

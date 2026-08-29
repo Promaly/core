@@ -27,49 +27,70 @@ function identity(role: 'owner' | 'admin' | 'member' | 'guest'): IdentityService
   };
 }
 
-async function buildTestApp(role: 'owner' | 'admin' | 'member' | 'guest') {
+const noSession: IdentityService = { ...identity('owner'), getSession: async () => null };
+
+async function buildTestApp(identityService: IdentityService) {
   const app = Fastify();
   app.decorateRequest('principal', undefined);
   await app.register(cookie);
   app.get(
     '/protected',
     {
-      preHandler: [createPrincipalPreHandler(identity(role)), requireCapability('project.manage')],
+      preHandler: [createPrincipalPreHandler(identityService), requireCapability('project.manage')],
     },
     async () => ({ ok: true }),
   );
+  // Capability check with no principal resolver in front of it.
+  app.get('/misordered', { preHandler: [requireCapability('workspace.read')] }, async () => ({
+    ok: true,
+  }));
   return app;
 }
 
+const withSession = { cookie: 'promaly_session=session-token', 'x-workspace-id': workspaceId };
+
 describe('principal pre-handler', () => {
   it('returns 400 without a workspace header', async () => {
-    const app = await buildTestApp('owner');
+    const app = await buildTestApp(identity('owner'));
     expect((await app.inject({ method: 'GET', url: '/protected' })).statusCode).toBe(400);
     await app.close();
   });
 
+  it('returns 401 without a valid session', async () => {
+    const app = await buildTestApp(noSession);
+    const response = await app.inject({ method: 'GET', url: '/protected', headers: withSession });
+    expect(response.statusCode).toBe(401);
+    await app.close();
+  });
+
   it('allows an owner and denies a member', async () => {
-    const owner = await buildTestApp('owner');
-    const member = await buildTestApp('member');
-    const headers = { cookie: 'promaly_session=session-token', 'x-workspace-id': workspaceId };
-    expect((await owner.inject({ method: 'GET', url: '/protected', headers })).statusCode).toBe(
-      200,
-    );
-    expect((await member.inject({ method: 'GET', url: '/protected', headers })).statusCode).toBe(
-      403,
-    );
+    const owner = await buildTestApp(identity('owner'));
+    const member = await buildTestApp(identity('member'));
+    expect(
+      (await owner.inject({ method: 'GET', url: '/protected', headers: withSession })).statusCode,
+    ).toBe(200);
+    expect(
+      (await member.inject({ method: 'GET', url: '/protected', headers: withSession })).statusCode,
+    ).toBe(403);
     await owner.close();
     await member.close();
   });
 
   it('returns 404 for another workspace', async () => {
-    const app = await buildTestApp('owner');
+    const app = await buildTestApp(identity('owner'));
     const response = await app.inject({
       method: 'GET',
       url: '/protected',
       headers: { cookie: 'promaly_session=session-token', 'x-workspace-id': otherWorkspaceId },
     });
     expect(response.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('fails closed with 500 when requireCapability runs before the principal is resolved', async () => {
+    const app = await buildTestApp(identity('owner'));
+    const response = await app.inject({ method: 'GET', url: '/misordered', headers: withSession });
+    expect(response.statusCode).toBe(500);
     await app.close();
   });
 });

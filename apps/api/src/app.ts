@@ -19,7 +19,7 @@ import {
   createIdentityService,
   type IdentityService,
 } from './identity.js';
-import './principal.js';
+import { createPrincipalPreHandler } from './principal.js';
 
 type ReadinessChecks = {
   database: () => Promise<void>;
@@ -58,7 +58,6 @@ export function buildMetricsApp(config: AppConfig, metrics = createMetricsState(
   const app = Fastify({
     logger: { level: config.logLevel, redact: ['req.headers.authorization'] },
   });
-  app.decorateRequest('principal', undefined);
   app.get('/metrics', async (request, reply) => {
     if (config.metricsToken && request.headers.authorization !== `Bearer ${config.metricsToken}`) {
       return reply.code(401).send({ error: 'Metrics authentication is required.' });
@@ -164,6 +163,12 @@ export function buildApp(
     maxHeapUsedBytes: 512 * 1024 * 1024,
     maxRssBytes: 768 * 1024 * 1024,
   });
+
+  // Workspace authorization spine. Routes that operate inside a workspace add
+  // `app.requireWorkspace` (resolves `request.principal`) then a
+  // `requireCapability(...)` preHandler.
+  app.decorateRequest('principal', undefined);
+  app.decorate('requireWorkspace', createPrincipalPreHandler(dependencies.identity));
 
   app.addHook('onResponse', async (request) => {
     if (request.routeOptions.url !== '/metrics') {
