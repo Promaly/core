@@ -4,18 +4,19 @@ import { and, eq, gt, isNull } from 'drizzle-orm';
 import type { AuthenticatedSession, LoginRequest, RegisterRequest } from '@promaly/contracts';
 import {
   accounts,
-  auditEvents,
   authSessions,
   emit,
+  passwordResetTokens,
   type DatabaseClient,
-  workflowStates,
-  workflows,
   workspaceMembers,
   workspaces,
 } from '@promaly/db';
 import { createWorkspaceSlug, newId, normalizeEmail } from '@promaly/domain';
+import { provisionWorkspace } from './provisioning.js';
 
-const sessionDurationMs = 1000 * 60 * 60 * 24 * 30;
+// Sessions do not slide their expiry: this is an absolute cap, not an idle timeout.
+const sessionDurationMs = 1000 * 60 * 60 * 24 * 90;
+const passwordResetDurationMs = 1000 * 60 * 60;
 const sessionLastSeenWriteIntervalMs = 1000 * 60 * 5;
 // This valid Argon2id hash is intentionally for a value no caller can authenticate with.
 const missingAccountPasswordHash =
@@ -23,6 +24,7 @@ const missingAccountPasswordHash =
 
 export class AuthenticationError extends Error {}
 export class ConflictError extends Error {}
+export class PasswordResetError extends Error {}
 
 type RequestMetadata = {
   ipAddress?: string;
@@ -42,18 +44,30 @@ export type IdentityService = {
   login(
     input: LoginRequest,
     metadata: RequestMetadata,
+    currentToken?: string | undefined,
+  ): Promise<AuthenticatedSession & { token: SessionToken }>;
+  startSession(
+    accountId: string,
+    metadata: RequestMetadata,
   ): Promise<AuthenticatedSession & { token: SessionToken }>;
   getSession(token: string): Promise<AuthenticatedSession | null>;
   logout(token: string): Promise<void>;
+  logoutAll(accountId: string): Promise<void>;
+  requestPasswordReset(email: string): Promise<void>;
+  resetPassword(token: string, password: string): Promise<void>;
 };
 
 function hashSessionToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function createOpaqueToken() {
+  return randomBytes(32).toString('base64url');
+}
+
 function createSessionToken(): SessionToken {
   return {
-    value: randomBytes(32).toString('base64url'),
+    value: createOpaqueToken(),
     expiresAt: new Date(Date.now() + sessionDurationMs),
   };
 }
@@ -76,6 +90,24 @@ export function createIdentityService(database: DatabaseClient): IdentityService
       userAgent: metadata.userAgent,
     });
     return token;
+  }
+
+  async function revokeSession(rawToken: string) {
+    await db
+      .update(authSessions)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(eq(authSessions.tokenHash, hashSessionToken(rawToken)), isNull(authSessions.revokedAt)),
+      );
+  }
+
+  async function issueSession(accountId: string, metadata: RequestMetadata) {
+    const token = await createSession(accountId, metadata);
+    const session = await getSession(token.value);
+    if (!session) {
+      throw new Error('Failed to create an authenticated session.');
+    }
+    return { ...session, token };
   }
 
   async function getSession(token: string): Promise<AuthenticatedSession | null> {
@@ -149,7 +181,6 @@ export function createIdentityService(database: DatabaseClient): IdentityService
 
       const accountId = newId();
       const workspaceId = newId();
-      const workflowId = newId();
       const passwordHash = await argon2.hash(input.password, {
         type: argon2.argon2id,
         memoryCost: 19_456,
@@ -160,83 +191,13 @@ export function createIdentityService(database: DatabaseClient): IdentityService
       try {
         await db.transaction(async (transaction) => {
           await transaction.insert(accounts).values({ id: accountId, email, passwordHash });
-          await transaction.insert(workspaces).values({
-            id: workspaceId,
+          await provisionWorkspace(transaction, {
+            workspaceId,
+            ownerId: accountId,
             name: input.workspaceName.trim(),
             slug,
-            createdBy: accountId,
-          });
-          await transaction.insert(workspaceMembers).values({
-            workspaceId,
-            accountId,
-            role: 'owner',
-          });
-          await transaction.insert(workflows).values({
-            id: workflowId,
-            workspaceId,
-            name: 'Default workflow',
-            isDefault: true,
-            createdBy: accountId,
-          });
-          await transaction.insert(workflowStates).values([
-            {
-              id: newId(),
-              workflowId,
-              name: 'Backlog',
-              category: 'backlog',
-              position: 0,
-              color: '#6b7280',
-            },
-            {
-              id: newId(),
-              workflowId,
-              name: 'Todo',
-              category: 'unstarted',
-              position: 1,
-              color: '#94a3b8',
-            },
-            {
-              id: newId(),
-              workflowId,
-              name: 'In progress',
-              category: 'started',
-              position: 2,
-              color: '#3b82f6',
-            },
-            {
-              id: newId(),
-              workflowId,
-              name: 'Done',
-              category: 'completed',
-              position: 3,
-              color: '#22c55e',
-            },
-            {
-              id: newId(),
-              workflowId,
-              name: 'Cancelled',
-              category: 'cancelled',
-              position: 4,
-              color: '#ef4444',
-            },
-          ]);
-          await transaction.insert(auditEvents).values({
-            id: newId(),
-            workspaceId,
-            actorId: accountId,
-            action: 'workspace.created',
-            targetType: 'workspace',
-            targetId: workspaceId,
-            metadata: { source: 'registration' },
+            source: 'registration',
             ipAddress: metadata.ipAddress,
-          });
-          await emit(transaction, {
-            id: newId(),
-            workspaceId,
-            aggregateType: 'workspace',
-            aggregateId: workspaceId,
-            type: 'workspace.created',
-            payload: { accountId },
           });
         });
       } catch (error) {
@@ -252,17 +213,10 @@ export function createIdentityService(database: DatabaseClient): IdentityService
         throw error;
       }
 
-      const token = await createSession(accountId, metadata);
-      const session = await getSession(token.value);
-
-      if (!session) {
-        throw new Error('Failed to create an authenticated session.');
-      }
-
-      return { ...session, token };
+      return issueSession(accountId, metadata);
     },
 
-    async login(input, metadata) {
+    async login(input, metadata, currentToken) {
       const email = normalizeEmail(input.email);
       const rows = await db
         .select({ id: accounts.id, passwordHash: accounts.passwordHash })
@@ -278,25 +232,113 @@ export function createIdentityService(database: DatabaseClient): IdentityService
         throw new AuthenticationError('Invalid email or password.');
       }
 
-      const token = await createSession(account.id, metadata);
-      const session = await getSession(token.value);
+      // Session fixation: retire any token the client presented before minting a new one.
+      if (currentToken) await revokeSession(currentToken);
+      return issueSession(account.id, metadata);
+    },
 
-      if (!session) {
-        throw new Error('Failed to create an authenticated session.');
-      }
-
-      return { ...session, token };
+    async startSession(accountId, metadata) {
+      return issueSession(accountId, metadata);
     },
 
     getSession,
 
     async logout(token) {
+      await revokeSession(token);
+    },
+
+    async logoutAll(accountId) {
       await db
         .update(authSessions)
         .set({ revokedAt: new Date() })
-        .where(
-          and(eq(authSessions.tokenHash, hashSessionToken(token)), isNull(authSessions.revokedAt)),
-        );
+        .where(and(eq(authSessions.accountId, accountId), isNull(authSessions.revokedAt)));
+    },
+
+    async requestPasswordReset(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const account = (
+        await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.email, email))
+          .limit(1)
+      )[0];
+      // Always return success so this endpoint cannot reveal whether an account exists.
+      if (!account) return;
+
+      const token = createOpaqueToken();
+      await db.transaction(async (transaction) => {
+        await transaction.insert(passwordResetTokens).values({
+          id: newId(),
+          accountId: account.id,
+          tokenHash: hashSessionToken(token),
+          expiresAt: new Date(Date.now() + passwordResetDurationMs),
+        });
+        await emit(transaction, {
+          id: newId(),
+          aggregateType: 'account',
+          aggregateId: account.id,
+          type: 'email.send',
+          payload: {
+            to: email,
+            subject: 'Reset your Promaly password',
+            text: `Use this password reset token within one hour: ${token}`,
+          },
+        });
+      });
+    },
+
+    async resetPassword(token, password) {
+      const now = new Date();
+      const tokenHash = hashSessionToken(token);
+
+      // Cheap validity check first: an invalid or spent token must never reach
+      // the (expensive) Argon2 hash on this unauthenticated endpoint.
+      const pending = (
+        await db
+          .select({ id: passwordResetTokens.id })
+          .from(passwordResetTokens)
+          .where(
+            and(
+              eq(passwordResetTokens.tokenHash, tokenHash),
+              isNull(passwordResetTokens.usedAt),
+              gt(passwordResetTokens.expiresAt, now),
+            ),
+          )
+          .limit(1)
+      )[0];
+      if (!pending) {
+        throw new PasswordResetError('This password reset link is invalid or expired.');
+      }
+
+      const passwordHash = await argon2.hash(password, {
+        type: argon2.argon2id,
+        memoryCost: 19_456,
+        timeCost: 2,
+        parallelism: 1,
+      });
+
+      await db.transaction(async (transaction) => {
+        // Consume atomically; a concurrent request loses the race here.
+        const consumed = await transaction
+          .update(passwordResetTokens)
+          .set({ usedAt: now })
+          .where(and(eq(passwordResetTokens.id, pending.id), isNull(passwordResetTokens.usedAt)))
+          .returning({ accountId: passwordResetTokens.accountId });
+        const reset = consumed[0];
+        if (!reset) {
+          throw new PasswordResetError('This password reset link is invalid or expired.');
+        }
+
+        await transaction
+          .update(accounts)
+          .set({ passwordHash })
+          .where(eq(accounts.id, reset.accountId));
+        await transaction
+          .update(authSessions)
+          .set({ revokedAt: now })
+          .where(and(eq(authSessions.accountId, reset.accountId), isNull(authSessions.revokedAt)));
+      });
     },
   };
 }

@@ -1,31 +1,166 @@
 name: promaly
 
+# Zero-touch deployment: `docker compose up -d` with no .env and no editing.
+#
+# Internal service credentials (Postgres + MinIO) are generated once by the
+# `bootstrap` service into the `promaly-secrets` volume and never leave it — no
+# secrets in this file, in `docker inspect`, or in git. The first admin account
+# is created through the web UI on first visit.
+#
+# `.env` is optional and only carries operator choices (public port, SMTP,
+# running a released image instead of building). See `.env.example`.
+
+x-promaly-image: &promaly-image
+  image: ${PROMALY_IMAGE:-promaly}:${PROMALY_VERSION:-local}
+  build:
+    context: .
+  pull_policy: ${PROMALY_PULL_POLICY:-missing}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
 services:
+  # One-shot: generate internal credentials on first run. Idempotent — existing
+  # secrets are never overwritten. Nothing here is operator-facing.
+  bootstrap:
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727 # RELEASE.2025-08-13T08-35-41Z
+    entrypoint: ['/bin/sh', '-ec']
+    command:
+      - |
+        umask 077
+        mkdir -p /run/promaly
+        for name in db_owner_password db_app_password minio_root_password; do
+          f="/run/promaly/$$name"
+          [ -s "$$f" ] || head -c 48 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$$f"
+        done
+        chmod 0444 /run/promaly/*
+        echo "promaly: internal credentials ready"
+    volumes:
+      - promaly-secrets:/run/promaly
+    restart: 'no'
+    logging: *logging
+
+  postgres:
+    image: postgres@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675 # postgres:17
+    shm_size: 128mb
+    environment:
+      POSTGRES_DB: promaly
+      POSTGRES_USER: promaly
+      POSTGRES_PASSWORD_FILE: /run/promaly/db_owner_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - promaly-secrets:/run/promaly:ro
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U promaly -d promaly']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging: *logging
+
+  minio:
+    image: minio/minio@sha256:3f97c5651cb6662b880c787a232b6b34fec8d8922e08d6617b25d241a21164bb # RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: promaly
+      MINIO_ROOT_PASSWORD_FILE: /run/promaly/minio_root_password
+    volumes:
+      - minio-data:/data
+      - promaly-secrets:/run/promaly:ro
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging: *logging
+
+  # Applies migrations, then exits. The API and worker wait for it.
+  migrate:
+    <<: *promaly-image
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        export MIGRATION_DATABASE_URL="postgres://promaly:$$(cat /run/promaly/db_owner_password)@postgres:5432/promaly"
+        exec node packages/db/dist/migrate.js
+    volumes:
+      - promaly-secrets:/run/promaly:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+    logging: *logging
+
+  # Creates the private object-storage bucket, then exits.
+  createbuckets:
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727 # RELEASE.2025-08-13T08-35-41Z
+    entrypoint: ['/bin/sh', '-ec']
+    command:
+      - |
+        mc alias set promaly http://minio:9000 promaly "$$(cat /run/promaly/minio_root_password)"
+        mc mb --ignore-existing promaly/"$${PROMALY_S3_BUCKET:-promaly}"
+        mc anonymous set none promaly/"$${PROMALY_S3_BUCKET:-promaly}"
+    environment:
+      PROMALY_S3_BUCKET: ${PROMALY_S3_BUCKET:-promaly}
+    volumes:
+      - promaly-secrets:/run/promaly:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: 'no'
+    logging: *logging
+
   app:
-    image: ${PROMALY_IMAGE:-ghcr.io/promaly/promaly}:${PROMALY_VERSION:?Set PROMALY_VERSION in .env}
-    command: ['node', 'apps/api/dist/main.js']
+    <<: *promaly-image
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        export DATABASE_URL="postgres://promaly_app:$$(cat /run/promaly/db_app_password)@postgres:5432/promaly"
+        exec node apps/api/dist/main.js
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://promaly_app:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@postgres:5432/promaly
-      MIGRATION_DATABASE_URL: postgres://promaly:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/promaly
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${PROMALY_S3_BUCKET:-promaly}
       S3_REGION: ${S3_REGION:-us-east-1}
       SMTP_URL: ${SMTP_URL:-}
       SMTP_FROM: ${SMTP_FROM:-}
-      WORKER_HEALTH_PORT: 8081
-      # Kept off the host; available only to services on the Compose network.
+      # Metrics bind to the Compose network only (never published to the host).
       METRICS_HOST: 0.0.0.0
       METRICS_PORT: 9090
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      WORKER_HEALTH_PORT: 8081
+      OTEL_TRACES_ENABLED: ${OTEL_TRACES_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - promaly-secrets:/run/promaly:ro
     depends_on:
       migrate:
         condition: service_completed_successfully
-      minio:
-        condition: service_healthy
       createbuckets:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
     ports:
       - '${PROMALY_PORT:-3000}:3000'
     restart: unless-stopped
@@ -42,18 +177,18 @@ services:
       resources:
         limits:
           memory: 512M
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
+    logging: *logging
 
   worker:
-    image: ${PROMALY_IMAGE:-ghcr.io/promaly/promaly}:${PROMALY_VERSION:?Set PROMALY_VERSION in .env}
-    command: ['node', 'apps/worker/dist/main.js']
+    <<: *promaly-image
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        export DATABASE_URL="postgres://promaly_app:$$(cat /run/promaly/db_app_password)@postgres:5432/promaly"
+        exec node apps/worker/dist/main.js
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://promaly_app:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@postgres:5432/promaly
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${PROMALY_S3_BUCKET:-promaly}
       S3_REGION: ${S3_REGION:-us-east-1}
@@ -61,13 +196,15 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       WORKER_HEALTH_PORT: 8081
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - promaly-secrets:/run/promaly:ro
     depends_on:
       migrate:
         condition: service_completed_successfully
-      minio:
-        condition: service_healthy
       createbuckets:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test:
@@ -82,91 +219,9 @@ services:
       resources:
         limits:
           memory: 256M
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
-
-  postgres:
-    image: postgres@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675 # postgres:17
-    environment:
-      POSTGRES_DB: promaly
-      POSTGRES_USER: promaly
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./infra/postgres/init/10-app-role.sql:/docker-entrypoint-initdb.d/10-app-role.sql:ro
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U promaly -d promaly']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
-
-  minio:
-    image: minio/minio@sha256:3f97c5651cb6662b880c787a232b6b34fec8d8922e08d6617b25d241a21164bb # RELEASE.2025-04-22T22-12-26Z
-    command: server /data --console-address ':9001'
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
-    volumes:
-      - minio-data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ['CMD-SHELL', 'curl -fsS http://localhost:9000/minio/health/live']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
-
-  migrate:
-    image: ${PROMALY_IMAGE:-ghcr.io/promaly/promaly}:${PROMALY_VERSION:?Set PROMALY_VERSION in .env}
-    command: ['node', 'packages/db/dist/migrate.js']
-    environment:
-      MIGRATION_DATABASE_URL: postgres://promaly:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/promaly
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: 'no'
-
-  createbuckets:
-    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727 # RELEASE.2025-08-13T08-35-41Z
-    entrypoint: ['/bin/sh', '-ec']
-    # Single-element list: Compose passes it verbatim as the `sh -c` script.
-    # A bare string here would be shlex-split and only the first word would run.
-    command:
-      - |
-        mc alias set promaly http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
-        mc mb --ignore-existing promaly/"$$S3_BUCKET"
-        mc anonymous set none promaly/"$$S3_BUCKET"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
-      S3_BUCKET: ${PROMALY_S3_BUCKET:-promaly}
-    depends_on:
-      minio:
-        condition: service_healthy
-    restart: 'no'
+    logging: *logging
 
 volumes:
   postgres-data:
   minio-data:
+  promaly-secrets:

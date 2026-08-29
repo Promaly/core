@@ -8,8 +8,15 @@ import Fastify from 'fastify';
 import {
   authenticatedSessionSchema,
   healthResponseSchema,
+  invitationAcceptRequestSchema,
+  invitationRequestSchema,
   loginRequestSchema,
+  memberRoleUpdateRequestSchema,
+  passwordResetConfirmSchema,
+  passwordResetRequestSchema,
   registerRequestSchema,
+  workspaceCreateRequestSchema,
+  workspaceUpdateRequestSchema,
 } from '@promaly/contracts';
 import type { AppConfig } from '@promaly/config';
 import { createDatabaseClient, type DatabaseClient } from '@promaly/db';
@@ -17,9 +24,17 @@ import {
   AuthenticationError,
   ConflictError,
   createIdentityService,
+  PasswordResetError,
   type IdentityService,
 } from './identity.js';
-import { createPrincipalPreHandler } from './principal.js';
+import { createPrincipalPreHandler, requireCapability } from './principal.js';
+import {
+  createTenancyService,
+  InvitationAcceptanceError,
+  LastOwnerError,
+  TenancyNotFoundError,
+  type TenancyService,
+} from './tenancy.js';
 
 type ReadinessChecks = {
   database: () => Promise<void>;
@@ -30,6 +45,7 @@ type ReadinessChecks = {
 type AppDependencies = {
   readinessChecks: ReadinessChecks;
   identity: IdentityService | undefined;
+  tenancy?: TenancyService | undefined;
 };
 
 export type MetricsState = {
@@ -75,6 +91,7 @@ function createAppDependencies(config: AppConfig): AppDependencies {
 
   return {
     identity: database ? createIdentityService(database) : undefined,
+    tenancy: database ? createTenancyService(database) : undefined,
     readinessChecks: {
       async database() {
         if (!database) {
@@ -113,7 +130,7 @@ function requestMetadata(request: { ip: string; headers: { 'user-agent'?: string
   return metadata;
 }
 
-export function buildApp(
+export async function buildApp(
   config: AppConfig,
   dependencies = createAppDependencies(config),
   metrics = createMetricsState(),
@@ -136,19 +153,38 @@ export function buildApp(
     sameSite: 'lax' as const,
     secure: config.nodeEnv === 'production',
     path: '/',
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: 60 * 60 * 24 * 90,
   };
   const requireCsrf = (
     request: Parameters<typeof app.csrfProtection>[0],
     reply: Parameters<typeof app.csrfProtection>[1],
     done: Parameters<typeof app.csrfProtection>[2],
   ) => app.csrfProtection(request, reply, done);
+  const currentSession = async (request: { cookies: { promaly_session?: string } }) => {
+    const token = request.cookies.promaly_session;
+    return token && dependencies.identity ? dependencies.identity.getSession(token) : null;
+  };
+  const tenancyFailure = (
+    error: unknown,
+    reply: { code: (status: number) => { send: (body: object) => unknown } },
+  ) => {
+    if (error instanceof TenancyNotFoundError)
+      return reply.code(404).send({ error: error.message });
+    if (error instanceof LastOwnerError || error instanceof ConflictError) {
+      return reply.code(409).send({ error: error.message });
+    }
+    if (error instanceof InvitationAcceptanceError)
+      return reply.code(400).send({ error: error.message });
+    throw error;
+  };
 
-  void app.register(cookie);
-  void app.register(helmet, {
+  // Registrations are awaited: @fastify/rate-limit only wires its hooks once it
+  // has finished loading, so `void register(...)` silently disables it.
+  await app.register(cookie);
+  await app.register(helmet, {
     contentSecurityPolicy: { directives: { defaultSrc: ["'none'"] } },
   });
-  void app.register(csrfProtection, {
+  await app.register(csrfProtection, {
     cookieOpts: {
       httpOnly: true,
       sameSite: 'lax',
@@ -157,8 +193,9 @@ export function buildApp(
     },
     getToken: (request) => request.headers['x-csrf-token'] as string | undefined,
   });
-  void app.register(rateLimit, { global: false });
-  void app.register(underPressure, {
+  // Global baseline; auth routes tighten it with per-route `config.rateLimit`.
+  await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute' });
+  await app.register(underPressure, {
     maxEventLoopDelay: 1_000,
     maxHeapUsedBytes: 512 * 1024 * 1024,
     maxRssBytes: 768 * 1024 * 1024,
@@ -179,7 +216,7 @@ export function buildApp(
     await dependencies.readinessChecks.close();
   });
 
-  app.get('/healthz', async () =>
+  app.get('/healthz', { config: { rateLimit: false } }, async () =>
     healthResponseSchema.parse({
       status: 'ok',
       service: 'api',
@@ -187,7 +224,7 @@ export function buildApp(
     }),
   );
 
-  app.get('/readyz', async (_request, reply) => {
+  app.get('/readyz', { config: { rateLimit: false } }, async (_request, reply) => {
     try {
       if (app.isUnderPressure()) {
         return reply.code(503).send({ status: 'not_ready', reason: 'Service is under pressure' });
@@ -241,7 +278,11 @@ export function buildApp(
       if (!input.success) return reply.code(400).send({ error: 'Invalid login input.' });
 
       try {
-        const result = await dependencies.identity.login(input.data, requestMetadata(request));
+        const result = await dependencies.identity.login(
+          input.data,
+          requestMetadata(request),
+          request.cookies.promaly_session,
+        );
         reply.setCookie('promaly_session', result.token.value, {
           ...sessionCookie,
           expires: result.token.expiresAt,
@@ -263,6 +304,48 @@ export function buildApp(
     return reply.code(204).send();
   });
 
+  app.delete('/v1/auth/sessions', { onRequest: requireCsrf }, async (request, reply) => {
+    const session = await currentSession(request);
+    if (!session || !dependencies.identity) {
+      return reply.code(401).send({ error: 'Authentication is required.' });
+    }
+    await dependencies.identity.logoutAll(session.account.id);
+    reply.clearCookie('promaly_session', { path: '/' });
+    return reply.code(204).send();
+  });
+
+  app.post(
+    '/v1/auth/password-reset',
+    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } }, onRequest: requireCsrf },
+    async (request, reply) => {
+      const input = passwordResetRequestSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid password reset input.' });
+      if (dependencies.identity) await dependencies.identity.requestPasswordReset(input.data.email);
+      return reply.code(202).send();
+    },
+  );
+
+  app.post(
+    '/v1/auth/password-reset/:token',
+    { config: { rateLimit: { max: 10, timeWindow: '1 hour' } }, onRequest: requireCsrf },
+    async (request, reply) => {
+      const input = passwordResetConfirmSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid password reset input.' });
+      const token = (request.params as { token?: string }).token;
+      if (!token || !dependencies.identity)
+        return reply.code(400).send({ error: 'Invalid password reset link.' });
+      try {
+        await dependencies.identity.resetPassword(token, input.data.password);
+        reply.clearCookie('promaly_session', { path: '/' });
+        return reply.code(204).send();
+      } catch (error) {
+        if (error instanceof PasswordResetError)
+          return reply.code(400).send({ error: error.message });
+        throw error;
+      }
+    },
+  );
+
   app.get('/v1/auth/me', async (request, reply) => {
     const token = request.cookies.promaly_session;
     const session =
@@ -270,6 +353,250 @@ export function buildApp(
     if (!session) return reply.code(401).send({ error: 'Authentication is required.' });
     return authenticatedSessionSchema.parse(session);
   });
+
+  app.post('/v1/workspaces', { onRequest: requireCsrf }, async (request, reply) => {
+    const input = workspaceCreateRequestSchema.safeParse(request.body);
+    const session = await currentSession(request);
+    if (!session) return reply.code(401).send({ error: 'Authentication is required.' });
+    if (!input.success) return reply.code(400).send({ error: 'Invalid workspace input.' });
+    if (!dependencies.tenancy) return reply.code(503).send({ error: 'Tenancy is not configured.' });
+    try {
+      const workspace = await dependencies.tenancy.createWorkspace(
+        session.account.id,
+        input.data,
+        requestMetadata(request),
+      );
+      return reply.code(201).send(workspace);
+    } catch (error) {
+      return tenancyFailure(error, reply);
+    }
+  });
+
+  app.patch(
+    '/v1/workspaces/:id',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('workspace.settings')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = workspaceUpdateRequestSchema.safeParse(request.body);
+      if (!id || request.principal?.workspaceId !== id)
+        return reply.code(404).send({ error: 'Workspace not found.' });
+      if (!input.success) return reply.code(400).send({ error: 'Invalid workspace input.' });
+      if (!dependencies.tenancy || !request.principal)
+        return reply.code(503).send({ error: 'Tenancy is not configured.' });
+      try {
+        return await dependencies.tenancy.updateWorkspace(
+          id,
+          request.principal.accountId,
+          input.data,
+          requestMetadata(request),
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.delete(
+    '/v1/workspaces/:id',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('workspace.transfer')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || request.principal?.workspaceId !== id)
+        return reply.code(404).send({ error: 'Workspace not found.' });
+      if (!dependencies.tenancy || !request.principal)
+        return reply.code(503).send({ error: 'Tenancy is not configured.' });
+      try {
+        await dependencies.tenancy.deleteWorkspace(id, request.principal.accountId);
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/invitations',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('member.manage')],
+    },
+    async (request, reply) => {
+      const input = invitationRequestSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid invitation input.' });
+      if (!dependencies.tenancy || !request.principal)
+        return reply.code(503).send({ error: 'Tenancy is not configured.' });
+      const invitation = await dependencies.tenancy.createInvitation(
+        request.principal.workspaceId,
+        request.principal.accountId,
+        input.data.email,
+        input.data.role,
+        requestMetadata(request),
+      );
+      return reply.code(201).send({ ...invitation, expiresAt: invitation.expiresAt.toISOString() });
+    },
+  );
+
+  app.get(
+    '/v1/invitations',
+    { preHandler: [app.requireWorkspace, requireCapability('member.manage')] },
+    async (request, reply) => {
+      if (!dependencies.tenancy || !request.principal)
+        return reply.code(503).send({ error: 'Tenancy is not configured.' });
+      const invitations = await dependencies.tenancy.listInvitations(request.principal.workspaceId);
+      return invitations.map((invitation) => ({
+        ...invitation,
+        expiresAt: invitation.expiresAt.toISOString(),
+        acceptedAt: invitation.acceptedAt?.toISOString() ?? null,
+        createdAt: invitation.createdAt.toISOString(),
+      }));
+    },
+  );
+
+  app.delete(
+    '/v1/invitations/:id',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('member.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.tenancy || !request.principal)
+        return reply.code(400).send({ error: 'Invalid invitation.' });
+      try {
+        await dependencies.tenancy.revokeInvitation(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post('/v1/invitations/:token/accept', { onRequest: requireCsrf }, async (request, reply) => {
+    const input = invitationAcceptRequestSchema.safeParse(request.body);
+    const token = (request.params as { token?: string }).token;
+    if (!input.success || !token)
+      return reply.code(400).send({ error: 'Invalid invitation acceptance input.' });
+    if (!dependencies.tenancy || !dependencies.identity)
+      return reply.code(503).send({ error: 'Tenancy is not configured.' });
+    const session = await currentSession(request);
+    try {
+      const result = await dependencies.tenancy.acceptInvitation(
+        token,
+        session?.account.id,
+        input.data.password,
+        requestMetadata(request),
+      );
+      // Log the accepting account in (new or existing) so it lands inside the workspace.
+      const authed = await dependencies.identity.startSession(
+        result.accountId,
+        requestMetadata(request),
+      );
+      reply.setCookie('promaly_session', authed.token.value, {
+        ...sessionCookie,
+        expires: authed.token.expiresAt,
+      });
+      return reply.code(201).send(authenticatedSessionSchema.parse(authed));
+    } catch (error) {
+      return tenancyFailure(error, reply);
+    }
+  });
+
+  app.get('/v1/members', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    if (!dependencies.tenancy || !request.principal)
+      return reply.code(503).send({ error: 'Tenancy is not configured.' });
+    const members = await dependencies.tenancy.listMembers(request.principal.workspaceId);
+    return members.map((member) => ({ ...member, joinedAt: member.joinedAt.toISOString() }));
+  });
+
+  app.patch(
+    '/v1/members/:accountId',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('member.manage')],
+    },
+    async (request, reply) => {
+      const input = memberRoleUpdateRequestSchema.safeParse(request.body);
+      const accountId = (request.params as { accountId?: string }).accountId;
+      if (!input.success || !accountId)
+        return reply.code(400).send({ error: 'Invalid member input.' });
+      if (!dependencies.tenancy || !request.principal)
+        return reply.code(503).send({ error: 'Tenancy is not configured.' });
+      // Granting `owner` is ownership transfer, not member management.
+      if (input.data.role === 'owner' && !request.principal.can('workspace.transfer')) {
+        return reply.code(403).send({ error: 'Only an owner can grant the owner role.' });
+      }
+      try {
+        await dependencies.tenancy.updateMemberRole(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          accountId,
+          input.data.role,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.delete(
+    '/v1/members/:accountId',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('member.manage')],
+    },
+    async (request, reply) => {
+      const accountId = (request.params as { accountId?: string }).accountId;
+      if (!accountId || !dependencies.tenancy || !request.principal)
+        return reply.code(400).send({ error: 'Invalid member.' });
+      try {
+        await dependencies.tenancy.removeMember(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          accountId,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/workspaces/:id/leave',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || request.principal?.workspaceId !== id)
+        return reply.code(404).send({ error: 'Workspace not found.' });
+      if (!dependencies.tenancy || !request.principal)
+        return reply.code(503).send({ error: 'Tenancy is not configured.' });
+      try {
+        await dependencies.tenancy.removeMember(
+          id,
+          request.principal.accountId,
+          request.principal.accountId,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
 
   return app;
 }
