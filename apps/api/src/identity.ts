@@ -6,6 +6,7 @@ import {
   accounts,
   authSessions,
   emit,
+  isUniqueViolation,
   passwordResetTokens,
   type DatabaseClient,
   workspaceMembers,
@@ -201,12 +202,7 @@ export function createIdentityService(database: DatabaseClient): IdentityService
           });
         });
       } catch (error) {
-        if (
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === '23505'
-        ) {
+        if (isUniqueViolation(error)) {
           throw new ConflictError('This workspace URL is already in use.');
         }
 
