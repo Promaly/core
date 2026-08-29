@@ -50,10 +50,55 @@ export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type AuthenticatedSession = z.infer<typeof authenticatedSessionSchema>;
 
+export const invitationRequestSchema = z.object({
+  email: z.email().max(254),
+  role: workspaceRoleSchema.exclude(['owner']),
+});
+
+export const invitationAcceptRequestSchema = z.object({
+  password: z.string().min(12).max(128).optional(),
+});
+
+export const passwordResetRequestSchema = z.object({
+  email: z.email().max(254),
+});
+
+export const passwordResetConfirmSchema = z.object({
+  password: z.string().min(12).max(128),
+});
+
+export const workspaceCreateRequestSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  slug: z
+    .string()
+    .trim()
+    .min(2)
+    .max(48)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .optional(),
+});
+
+export const workspaceUpdateRequestSchema = workspaceCreateRequestSchema
+  .partial()
+  .refine(
+    (value) => value.name !== undefined || value.slug !== undefined,
+    'At least one workspace field is required.',
+  );
+
+export const memberRoleUpdateRequestSchema = z.object({
+  role: workspaceRoleSchema,
+});
+
 export const phase1EventTypes = [
   'workspace.created',
   'workflow.seeded',
   'notification.fanout',
   'email.send',
+  'invitation.created',
+  'invitation.accepted',
+  'invitation.revoked',
+  'membership.changed',
+  'workspace.updated',
+  'workspace.deleted',
 ] as const;
 export type Phase1EventType = (typeof phase1EventTypes)[number];

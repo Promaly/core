@@ -10,7 +10,7 @@
     "start": "node dist/main.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "test:integration": "RUN_DATABASE_TESTS=true vitest run src/identity.integration.test.ts"
+    "test:integration": "RUN_DATABASE_TESTS=true vitest run src/*.integration.test.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

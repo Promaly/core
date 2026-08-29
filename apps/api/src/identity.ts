@@ -7,6 +7,7 @@ import {
   auditEvents,
   authSessions,
   emit,
+  passwordResetTokens,
   type DatabaseClient,
   workflowStates,
   workflows,
@@ -15,7 +16,9 @@ import {
 } from '@promaly/db';
 import { createWorkspaceSlug, newId, normalizeEmail } from '@promaly/domain';
 
-const sessionDurationMs = 1000 * 60 * 60 * 24 * 30;
+// Sessions do not slide their expiry: this is an absolute cap, not an idle timeout.
+const sessionDurationMs = 1000 * 60 * 60 * 24 * 90;
+const passwordResetDurationMs = 1000 * 60 * 60;
 const sessionLastSeenWriteIntervalMs = 1000 * 60 * 5;
 // This valid Argon2id hash is intentionally for a value no caller can authenticate with.
 const missingAccountPasswordHash =
@@ -23,6 +26,7 @@ const missingAccountPasswordHash =
 
 export class AuthenticationError extends Error {}
 export class ConflictError extends Error {}
+export class PasswordResetError extends Error {}
 
 type RequestMetadata = {
   ipAddress?: string;
@@ -45,15 +49,22 @@ export type IdentityService = {
   ): Promise<AuthenticatedSession & { token: SessionToken }>;
   getSession(token: string): Promise<AuthenticatedSession | null>;
   logout(token: string): Promise<void>;
+  logoutAll(accountId: string): Promise<void>;
+  requestPasswordReset(email: string): Promise<void>;
+  resetPassword(token: string, password: string): Promise<void>;
 };
 
 function hashSessionToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function createOpaqueToken() {
+  return randomBytes(32).toString('base64url');
+}
+
 function createSessionToken(): SessionToken {
   return {
-    value: randomBytes(32).toString('base64url'),
+    value: createOpaqueToken(),
     expiresAt: new Date(Date.now() + sessionDurationMs),
   };
 }
@@ -297,6 +308,92 @@ export function createIdentityService(database: DatabaseClient): IdentityService
         .where(
           and(eq(authSessions.tokenHash, hashSessionToken(token)), isNull(authSessions.revokedAt)),
         );
+    },
+
+    async logoutAll(accountId) {
+      await db
+        .update(authSessions)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(authSessions.accountId, accountId), isNull(authSessions.revokedAt)));
+    },
+
+    async requestPasswordReset(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const account = (
+        await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.email, email))
+          .limit(1)
+      )[0];
+      // Always return success so this endpoint cannot reveal whether an account exists.
+      if (!account) return;
+
+      const token = createOpaqueToken();
+      await db.transaction(async (transaction) => {
+        await transaction.insert(passwordResetTokens).values({
+          id: newId(),
+          accountId: account.id,
+          tokenHash: hashSessionToken(token),
+          expiresAt: new Date(Date.now() + passwordResetDurationMs),
+        });
+        await emit(transaction, {
+          id: newId(),
+          aggregateType: 'account',
+          aggregateId: account.id,
+          type: 'email.send',
+          payload: {
+            to: email,
+            subject: 'Reset your Promaly password',
+            text: `Use this password reset token within one hour: ${token}`,
+          },
+        });
+      });
+    },
+
+    async resetPassword(token, password) {
+      const now = new Date();
+      const tokenHash = hashSessionToken(token);
+      const passwordHash = await argon2.hash(password, {
+        type: argon2.argon2id,
+        memoryCost: 19_456,
+        timeCost: 2,
+        parallelism: 1,
+      });
+      await db.transaction(async (transaction) => {
+        const reset = (
+          await transaction
+            .select({ id: passwordResetTokens.id, accountId: passwordResetTokens.accountId })
+            .from(passwordResetTokens)
+            .where(
+              and(
+                eq(passwordResetTokens.tokenHash, tokenHash),
+                isNull(passwordResetTokens.usedAt),
+                gt(passwordResetTokens.expiresAt, now),
+              ),
+            )
+            .limit(1)
+        )[0];
+        if (!reset) throw new PasswordResetError('This password reset link is invalid or expired.');
+
+        const consumed = await transaction
+          .update(passwordResetTokens)
+          .set({ usedAt: now })
+          .where(and(eq(passwordResetTokens.id, reset.id), isNull(passwordResetTokens.usedAt)))
+          .returning({ id: passwordResetTokens.id });
+        if (consumed.length !== 1) {
+          throw new PasswordResetError('This password reset link is invalid or expired.');
+        }
+
+        await transaction
+          .update(accounts)
+          .set({ passwordHash })
+          .where(eq(accounts.id, reset.accountId));
+        await transaction
+          .update(authSessions)
+          .set({ revokedAt: now })
+          .where(and(eq(authSessions.accountId, reset.accountId), isNull(authSessions.revokedAt)));
+      });
     },
   };
 }

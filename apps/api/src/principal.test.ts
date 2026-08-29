@@ -16,6 +16,9 @@ function identity(role: 'owner' | 'admin' | 'member' | 'guest'): IdentityService
       throw new Error('not used');
     },
     logout: async () => undefined,
+    logoutAll: async () => undefined,
+    requestPasswordReset: async () => undefined,
+    resetPassword: async () => undefined,
     getSession: async () => ({
       account: {
         id: 'a409e498-31fe-457d-a7eb-3a9d8195a904',

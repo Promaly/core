@@ -117,6 +117,9 @@ describe('identity endpoints', () => {
     }),
     getSession: async () => session,
     logout: async () => undefined,
+    logoutAll: async () => undefined,
+    requestPasswordReset: async () => undefined,
+    resetPassword: async () => undefined,
   };
 
   it('registers an account and sets an HTTP-only session cookie', async () => {

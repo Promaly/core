@@ -23,7 +23,17 @@ export type DrainResult = {
  * consumers arrive in later slices. They are marked processed on sight rather
  * than left pending forever or retried.
  */
-const KNOWN_NOOP_EVENTS = new Set(['workspace.created', 'workflow.seeded', 'notification.fanout']);
+const KNOWN_NOOP_EVENTS = new Set([
+  'workspace.created',
+  'workflow.seeded',
+  'notification.fanout',
+  'invitation.created',
+  'invitation.accepted',
+  'invitation.revoked',
+  'membership.changed',
+  'workspace.updated',
+  'workspace.deleted',
+]);
 const MAX_ATTEMPTS = 8;
 const MAX_BACKOFF_SECONDS = 300;
 
