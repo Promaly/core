@@ -1,3 +1,15 @@
+# [0.3.0](https://github.com/Promaly/core/compare/v0.2.0...v0.3.0) (2026-08-29)
+
+
+### Bug Fixes
+
+* **phase-1:** wire the authz spine into the API and harden scoping [S1] ([0656484](https://github.com/Promaly/core/commit/06564847031e423e82d4e7d60ac06893b6a29e20))
+
+
+### Features
+
+* **phase-1:** add authorization spine [S1] ([5e49b4c](https://github.com/Promaly/core/commit/5e49b4c4e386c0a3f4e7d3829df99e2c6373484e))
+
 # [0.2.0](https://github.com/Promaly/core/compare/v0.1.0...v0.2.0) (2026-08-29)
 
 
