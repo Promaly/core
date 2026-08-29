@@ -1,3 +1,16 @@
+# [0.5.0](https://github.com/Promaly/core/compare/v0.4.1...v0.5.0) (2026-08-29)
+
+
+### Bug Fixes
+
+* **phase-1:** address S3/S4 review findings [S3][S4] ([e6376ec](https://github.com/Promaly/core/commit/e6376ec0f23678011d1dead578ff8a793065744b))
+
+
+### Features
+
+* **phase-1:** add issues API [S4] ([5bfb838](https://github.com/Promaly/core/commit/5bfb83851dec13173cccf35b9caa1ed5357ac5bf))
+* **phase-1:** add project management core [S3] ([658ca16](https://github.com/Promaly/core/commit/658ca162d1f3e3434ba59dac0940ae5129442dc8))
+
 ## [0.4.1](https://github.com/Promaly/core/compare/v0.4.0...v0.4.1) (2026-08-29)
 
 
