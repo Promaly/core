@@ -16,6 +16,11 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.1",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "nodemailer": "^9.0.6",
+    "uuidv7": "^1.2.1"
   }
 }

@@ -17,7 +17,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "test:e2e": "playwright test",
-    "test:integration": "pnpm --filter @promaly/db test:integration",
+    "test:integration": "turbo run test:integration --concurrency=1",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

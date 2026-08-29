@@ -103,7 +103,7 @@ importers:
         version: 0.45.1
       drizzle-orm:
         specifier: ^0.44.5
-        version: 0.44.7(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(postgres@3.4.9)
+        version: 0.44.7(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(pg@8.23.0)(postgres@3.4.9)
       fastify:
         specifier: ^5.5.0
         version: 5.12.1
@@ -111,6 +111,12 @@ importers:
         specifier: ^4.1.5
         version: 4.4.3
     devDependencies:
+      '@testcontainers/postgresql':
+        specifier: ^12.1.0
+        version: 12.1.0
+      testcontainers:
+        specifier: ^12.1.0
+        version: 12.1.0
       tsx:
         specifier: ^4.20.5
         version: 4.23.12
@@ -123,10 +129,28 @@ importers:
       '@promaly/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@promaly/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@promaly/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
     devDependencies:
+      '@testcontainers/postgresql':
+        specifier: ^12.1.0
+        version: 12.1.0
+      drizzle-orm:
+        specifier: ^0.44.5
+        version: 0.44.7(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(pg@8.23.0)(postgres@3.4.9)
+      testcontainers:
+        specifier: ^12.1.0
+        version: 12.1.0
       tsx:
         specifier: ^4.20.5
         version: 4.23.12
+      uuidv7:
+        specifier: ^1.2.1
+        version: 1.2.1
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.13.3)(jiti@2.6.1)(tsx@4.23.12)(yaml@2.9.0)
@@ -156,9 +180,12 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
+      '@promaly/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       drizzle-orm:
         specifier: ^0.44.5
-        version: 0.44.7(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(postgres@3.4.9)
+        version: 0.44.7(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(pg@8.23.0)(postgres@3.4.9)
       postgres:
         specifier: ^3.4.7
         version: 3.4.9
@@ -172,12 +199,25 @@ importers:
       tsx:
         specifier: ^4.20.5
         version: 4.23.12
+      uuidv7:
+        specifier: ^1.2.1
+        version: 1.2.1
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.13.3)(jiti@2.6.1)(tsx@4.23.12)(yaml@2.9.0)
 
   packages/domain:
+    dependencies:
+      nodemailer:
+        specifier: ^9.0.6
+        version: 9.0.6
+      uuidv7:
+        specifier: ^1.2.1
+        version: 1.2.1
     devDependencies:
+      '@types/nodemailer':
+        specifier: ^8.0.1
+        version: 8.0.1
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.13.3)(jiti@2.6.1)(tsx@4.23.12)(yaml@2.9.0)
@@ -1735,6 +1775,9 @@ packages:
   '@types/node@24.13.3':
     resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
 
+  '@types/nodemailer@8.0.1':
+    resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
+
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
 
@@ -3125,6 +3168,10 @@ packages:
     resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
     hasBin: true
 
+  nodemailer@9.0.6:
+    resolution: {integrity: sha512-IQUGFdhdGwI9+AWX+FpUt4DLmvFaOjTMEoneTIWX/RXxuy1TdenPwWrvFMSfLkPKl+HQEXWuSAxEMMbPYXtBmg==}
+    engines: {node: '>=6.0.0'}
+
   normalize-package-data@6.0.2:
     resolution: {integrity: sha512-V6gygoYb/5EmNI+MEGrWkC+e6+Rr7mTmfHrxDbLzxQogBkgzo76rkok0Am6thgSF7Mv2nLOajAJj5vDJZEFn7g==}
     engines: {node: ^16.14.0 || >=18.0.0}
@@ -3346,9 +3393,20 @@ packages:
     resolution: {integrity: sha512-//nshmD55c46FuFw26xV/xFAaB5HF9Xdap7HJBBnrKdAd6/GxDBaNA1870O79+9ueg61cZLSVc+OaFlfmObYVQ==}
     engines: {node: '>= 14.16'}
 
+  pg-cloudflare@1.4.0:
+    resolution: {integrity: sha512-Vo7z/6rrQYxpNRylp4Tlob2elzbh+N/MOQbxFVWCxS7oEx6jF53GTJFxK2WWpKuBRkmiin4Mt+xofFDjx09R0A==}
+
+  pg-connection-string@2.14.0:
+    resolution: {integrity: sha512-XwWDGcLRGCXAR8F/AM5bG7Q+A3Wm2s6QeEjlOKZLlH3UYcguiqCWKyWXVag5TLTIjR7oOJUY8kcADaZgWPyLeg==}
+
   pg-int8@1.0.1:
     resolution: {integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==}
     engines: {node: '>=4.0.0'}
+
+  pg-pool@3.14.0:
+    resolution: {integrity: sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw==}
+    peerDependencies:
+      pg: '>=8.0'
 
   pg-protocol@1.16.0:
     resolution: {integrity: sha512-sILXutLVjCLjcDuOmvhX5e2Z4cS5qG/6Bu3VkpFwdf/633ElGLpEh9bgmuI5I4sqKqkifQiGyiCcx1HdtrK7tg==}
@@ -3356,6 +3414,18 @@ packages:
   pg-types@2.2.0:
     resolution: {integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==}
     engines: {node: '>=4'}
+
+  pg@8.23.0:
+    resolution: {integrity: sha512-Ip2EQCngowJLGOfCwkFhPXU7/ljlhn6Rxlmy4XYfL2Y+vyRM59+8uR2xqRWKdYmbXmxCFOAmKxBuSUCdF34qLg==}
+    engines: {node: '>= 16.0.0'}
+    peerDependencies:
+      pg-native: '>=3.0.1'
+    peerDependenciesMeta:
+      pg-native:
+        optional: true
+
+  pgpass@1.0.5:
+    resolution: {integrity: sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -3972,6 +4042,10 @@ packages:
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+    hasBin: true
+
+  uuidv7@1.2.1:
+    resolution: {integrity: sha512-4kPkK3/XTQW9Hbm4CaqfICn+kY9LJtDVEOfgsRRra/+n2Ofg4NqzRFceAkxvQ/Ud/6BpHOPzj8cirqM7TzTN5Q==}
     hasBin: true
 
   validate-npm-package-license@3.0.4:
@@ -5743,6 +5817,10 @@ snapshots:
     dependencies:
       undici-types: 7.18.2
 
+  '@types/nodemailer@8.0.1':
+    dependencies:
+      '@types/node': 24.13.3
+
   '@types/normalize-package-data@2.4.4': {}
 
   '@types/oracledb@6.5.2':
@@ -6356,10 +6434,11 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.12
 
-  drizzle-orm@0.44.7(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(postgres@3.4.9):
+  drizzle-orm@0.44.7(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(pg@8.23.0)(postgres@3.4.9):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/pg': 8.15.6
+      pg: 8.23.0
       postgres: 3.4.9
 
   duplexer2@0.1.4:
@@ -7156,6 +7235,8 @@ snapshots:
 
   node-gyp-build@4.8.4: {}
 
+  nodemailer@9.0.6: {}
+
   normalize-package-data@6.0.2:
     dependencies:
       hosted-git-info: 7.0.2
@@ -7291,7 +7372,18 @@ snapshots:
 
   pathval@2.0.1: {}
 
+  pg-cloudflare@1.4.0:
+    optional: true
+
+  pg-connection-string@2.14.0:
+    optional: true
+
   pg-int8@1.0.1: {}
+
+  pg-pool@3.14.0(pg@8.23.0):
+    dependencies:
+      pg: 8.23.0
+    optional: true
 
   pg-protocol@1.16.0: {}
 
@@ -7302,6 +7394,22 @@ snapshots:
       postgres-bytea: 1.0.1
       postgres-date: 1.0.7
       postgres-interval: 1.2.0
+
+  pg@8.23.0:
+    dependencies:
+      pg-connection-string: 2.14.0
+      pg-pool: 3.14.0(pg@8.23.0)
+      pg-protocol: 1.16.0
+      pg-types: 2.2.0
+      pgpass: 1.0.5
+    optionalDependencies:
+      pg-cloudflare: 1.4.0
+    optional: true
+
+  pgpass@1.0.5:
+    dependencies:
+      split2: 4.2.0
+    optional: true
 
   picocolors@1.1.1: {}
 
@@ -7986,6 +8094,8 @@ snapshots:
   util-deprecate@1.0.2: {}
 
   uuid@9.0.1: {}
+
+  uuidv7@1.2.1: {}
 
   validate-npm-package-license@3.0.4:
     dependencies:
