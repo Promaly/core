@@ -15,11 +15,18 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 const tsvector = customType<{ data: string }>({ dataType: () => 'tsvector' });
 const createdAt = () => timestamp('created_at', { withTimezone: true }).defaultNow().notNull();
-const updatedAt = () => timestamp('updated_at', { withTimezone: true }).defaultNow().notNull();
+// `$onUpdate` keeps updated_at current on every Drizzle `.update()` — the write
+// path for all repositories. Raw-SQL writers must set it explicitly.
+const updatedAt = () =>
+  timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date());
 
 export const workspaceRole = pgEnum('workspace_role', ['owner', 'admin', 'member', 'guest']);
 export const workflowStateCategory = pgEnum('workflow_state_category', [
@@ -277,7 +284,9 @@ export const issues = pgTable(
       .references(() => workflowStates.id),
     priority: smallint('priority').notNull().default(0),
     assigneeId: uuid('assignee_id').references(() => accounts.id, { onDelete: 'set null' }),
-    parentIssueId: uuid('parent_issue_id'),
+    parentIssueId: uuid('parent_issue_id').references((): AnyPgColumn => issues.id, {
+      onDelete: 'set null',
+    }),
     sortKey: text('sort_key').notNull(),
     revision: integer('revision').notNull().default(1),
     createdBy: uuid('created_by')

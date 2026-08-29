@@ -9,16 +9,20 @@
     "lint": "eslint src",
     "start": "node dist/main.js",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:integration": "RUN_DATABASE_TESTS=true vitest run src/drain.integration.test.ts"
   },
   "dependencies": {
     "@promaly/config": "workspace:*",
     "@promaly/db": "workspace:*",
-    "@promaly/domain": "workspace:*",
-    "pg-boss": "^12.28.0"
+    "@promaly/domain": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.20.5",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@testcontainers/postgresql": "^12.1.0",
+    "testcontainers": "^12.1.0",
+    "uuidv7": "^1.2.1",
+    "drizzle-orm": "^0.44.5"
   }
 }

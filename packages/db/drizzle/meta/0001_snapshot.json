@@ -1041,6 +1041,15 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
+        "issues_parent_issue_id_issues_id_fk": {
+          "name": "issues_parent_issue_id_issues_id_fk",
+          "tableFrom": "issues",
+          "tableTo": "issues",
+          "columnsFrom": ["parent_issue_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
         "issues_created_by_accounts_id_fk": {
           "name": "issues_created_by_accounts_id_fk",
           "tableFrom": "issues",

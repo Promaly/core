@@ -1,24 +1,25 @@
 import { z } from 'zod';
 
+// Compose passes unset optional variables as "" (via `${VAR:-}`); treat blank as unset.
+const optional = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
+
 const configSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   METRICS_HOST: z.string().default('127.0.0.1'),
   METRICS_PORT: z.coerce.number().int().min(1).max(65535).default(9090),
-  METRICS_TOKEN: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.string().min(1).optional(),
-  ),
-  DATABASE_URL: z.string().url().optional(),
-  MIGRATION_DATABASE_URL: z.string().url().optional(),
-  S3_ENDPOINT: z.string().url().optional(),
+  METRICS_TOKEN: optional(z.string().min(1)),
+  DATABASE_URL: optional(z.string().url()),
+  MIGRATION_DATABASE_URL: optional(z.string().url()),
+  S3_ENDPOINT: optional(z.string().url()),
   S3_BUCKET: z.string().min(1).default('promaly'),
   S3_REGION: z.string().min(1).default('us-east-1'),
-  SMTP_URL: z.string().url().optional(),
-  SMTP_FROM: z.email().optional(),
+  SMTP_URL: optional(z.string().url()),
+  SMTP_FROM: optional(z.email()),
   WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(8081),
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: optional(z.string().url()),
   OTEL_SERVICE_NAME: z.string().min(1).default('promaly-api'),
   OTEL_TRACES_ENABLED: z
     .enum(['true', 'false'])
