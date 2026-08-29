@@ -1,3 +1,15 @@
+# [0.2.0](https://github.com/Promaly/core/compare/v0.1.0...v0.2.0) (2026-08-29)
+
+
+### Bug Fixes
+
+* **phase-1:** resolve S0 review findings and add integration tests [S0] ([76f6514](https://github.com/Promaly/core/commit/76f6514dd3fcbf02610dff7365fd0ea980c8cf3d))
+
+
+### Features
+
+* **phase-1:** add domain schema and outbox runtime [S0] ([9467e26](https://github.com/Promaly/core/commit/9467e26d1f806b7970e82ca29dfdd17440c097af))
+
 # 0.1.0 (2026-08-29)
 
 
