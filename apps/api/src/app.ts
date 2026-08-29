@@ -10,11 +10,23 @@ import {
   healthResponseSchema,
   invitationAcceptRequestSchema,
   invitationRequestSchema,
+  labelCreateRequestSchema,
+  labelUpdateRequestSchema,
   loginRequestSchema,
   memberRoleUpdateRequestSchema,
   passwordResetConfirmSchema,
   passwordResetRequestSchema,
   registerRequestSchema,
+  projectCreateRequestSchema,
+  projectUpdateRequestSchema,
+  teamCreateRequestSchema,
+  teamMemberRequestSchema,
+  teamUpdateRequestSchema,
+  workflowCreateRequestSchema,
+  workflowStateCreateRequestSchema,
+  workflowStateReorderRequestSchema,
+  workflowStateUpdateRequestSchema,
+  workflowUpdateRequestSchema,
   workspaceCreateRequestSchema,
   workspaceUpdateRequestSchema,
 } from '@promaly/contracts';
@@ -28,6 +40,12 @@ import {
   type IdentityService,
 } from './identity.js';
 import { createPrincipalPreHandler, requireCapability } from './principal.js';
+import {
+  createProjectManagementService,
+  ProjectKeyLockedError,
+  type ProjectManagementService,
+  WorkflowInvariantError,
+} from './project-management.js';
 import {
   createTenancyService,
   InvitationAcceptanceError,
@@ -46,6 +64,7 @@ type AppDependencies = {
   readinessChecks: ReadinessChecks;
   identity: IdentityService | undefined;
   tenancy?: TenancyService | undefined;
+  projectManagement?: ProjectManagementService | undefined;
 };
 
 export type MetricsState = {
@@ -92,6 +111,7 @@ function createAppDependencies(config: AppConfig): AppDependencies {
   return {
     identity: database ? createIdentityService(database) : undefined,
     tenancy: database ? createTenancyService(database) : undefined,
+    projectManagement: database ? createProjectManagementService(database) : undefined,
     readinessChecks: {
       async database() {
         if (!database) {
@@ -170,12 +190,24 @@ export async function buildApp(
   ) => {
     if (error instanceof TenancyNotFoundError)
       return reply.code(404).send({ error: error.message });
-    if (error instanceof LastOwnerError || error instanceof ConflictError) {
+    if (
+      error instanceof LastOwnerError ||
+      error instanceof ConflictError ||
+      error instanceof WorkflowInvariantError ||
+      error instanceof ProjectKeyLockedError
+    ) {
       return reply.code(409).send({ error: error.message });
     }
     if (error instanceof InvitationAcceptanceError)
       return reply.code(400).send({ error: error.message });
     throw error;
+  };
+  const page = (query: { cursor?: string; limit?: string }) => {
+    const requested = Number(query.limit ?? 50);
+    return {
+      cursor: query.cursor,
+      limit: Number.isInteger(requested) ? Math.max(1, Math.min(100, requested)) : 50,
+    };
   };
 
   // Registrations are awaited: @fastify/rate-limit only wires its hooks once it
@@ -589,6 +621,556 @@ export async function buildApp(
           id,
           request.principal.accountId,
           request.principal.accountId,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/teams',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const input = teamCreateRequestSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid team input.' });
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.projectManagement.createTeam(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              input.data,
+              requestMetadata(request),
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.get(
+    '/v1/teams',
+    { preHandler: [app.requireWorkspace, requireCapability('project.manage')] },
+    async (request, reply) => {
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      const query = request.query as { cursor?: string; limit?: string };
+      return dependencies.projectManagement.listTeams(
+        request.principal.workspaceId,
+        page(query).cursor,
+        page(query).limit,
+      );
+    },
+  );
+
+  app.patch(
+    '/v1/teams/:id',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = teamUpdateRequestSchema.safeParse(request.body);
+      if (!id || !input.success) return reply.code(400).send({ error: 'Invalid team input.' });
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return await dependencies.projectManagement.updateTeam(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          input.data,
+          requestMetadata(request),
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.delete(
+    '/v1/teams/:id',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.projectManagement || !request.principal)
+        return reply.code(400).send({ error: 'Invalid team.' });
+      try {
+        await dependencies.projectManagement.deleteTeam(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.get(
+    '/v1/teams/:id/members',
+    { preHandler: [app.requireWorkspace, requireCapability('project.manage')] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.projectManagement || !request.principal)
+        return reply.code(400).send({ error: 'Invalid team.' });
+      try {
+        return await dependencies.projectManagement.listTeamMembers(
+          request.principal.workspaceId,
+          id,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/teams/:id/members',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = teamMemberRequestSchema.safeParse(request.body);
+      if (!id || !input.success || !dependencies.projectManagement || !request.principal)
+        return reply.code(400).send({ error: 'Invalid team member input.' });
+      try {
+        await dependencies.projectManagement.addTeamMember(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          input.data.accountId,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.delete(
+    '/v1/teams/:id/members/:accountId',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const { id, accountId } = request.params as { id?: string; accountId?: string };
+      if (!id || !accountId || !dependencies.projectManagement || !request.principal)
+        return reply.code(400).send({ error: 'Invalid team member.' });
+      try {
+        await dependencies.projectManagement.removeTeamMember(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          accountId,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.get('/v1/workflows', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    if (!dependencies.projectManagement || !request.principal)
+      return reply.code(503).send({ error: 'Project management is not configured.' });
+    const query = request.query as { cursor?: string; limit?: string };
+    const pagination = page(query);
+    return dependencies.projectManagement.listWorkflows(
+      request.principal.workspaceId,
+      pagination.cursor,
+      pagination.limit,
+    );
+  });
+
+  app.post(
+    '/v1/workflows',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const input = workflowCreateRequestSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid workflow input.' });
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.projectManagement.createWorkflow(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              input.data,
+              requestMetadata(request),
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.patch(
+    '/v1/workflows/:id',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = workflowUpdateRequestSchema.safeParse(request.body);
+      if (!id || !input.success) return reply.code(400).send({ error: 'Invalid workflow input.' });
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return await dependencies.projectManagement.updateWorkflow(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          input.data,
+          requestMetadata(request),
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/workflows/:id/states',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = workflowStateCreateRequestSchema.safeParse(request.body);
+      if (!id || !input.success)
+        return reply.code(400).send({ error: 'Invalid workflow state input.' });
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.projectManagement.createWorkflowState(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              id,
+              input.data,
+              requestMetadata(request),
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.patch(
+    '/v1/workflows/:workflowId/states/:id',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const { workflowId, id } = request.params as { workflowId?: string; id?: string };
+      const input = workflowStateUpdateRequestSchema.safeParse(request.body);
+      if (!workflowId || !id || !input.success)
+        return reply.code(400).send({ error: 'Invalid workflow state input.' });
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return await dependencies.projectManagement.updateWorkflowState(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          workflowId,
+          id,
+          input.data,
+          requestMetadata(request),
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.delete(
+    '/v1/workflows/:workflowId/states/:id',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const { workflowId, id } = request.params as { workflowId?: string; id?: string };
+      if (!workflowId || !id || !dependencies.projectManagement || !request.principal)
+        return reply.code(400).send({ error: 'Invalid workflow state.' });
+      try {
+        await dependencies.projectManagement.deleteWorkflowState(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          workflowId,
+          id,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/workflows/:id/states/reorder',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = workflowStateReorderRequestSchema.safeParse(request.body);
+      if (!id || !input.success)
+        return reply.code(400).send({ error: 'Invalid workflow state order.' });
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        await dependencies.projectManagement.reorderWorkflowStates(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          input.data.stateIds,
+          requestMetadata(request),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/projects',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const input = projectCreateRequestSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid project input.' });
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.projectManagement.createProject(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              input.data,
+              requestMetadata(request),
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.get('/v1/projects', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    if (!dependencies.projectManagement || !request.principal)
+      return reply.code(503).send({ error: 'Project management is not configured.' });
+    const query = request.query as { cursor?: string; limit?: string; includeArchived?: string };
+    const pagination = page(query);
+    return dependencies.projectManagement.listProjects(request.principal.workspaceId, {
+      ...pagination,
+      includeArchived: query.includeArchived === 'true',
+    });
+  });
+
+  app.patch(
+    '/v1/projects/:id',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = projectUpdateRequestSchema.safeParse(request.body);
+      if (!id || !input.success) return reply.code(400).send({ error: 'Invalid project input.' });
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return await dependencies.projectManagement.updateProject(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          input.data,
+          requestMetadata(request),
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/projects/:id/archive',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.projectManagement || !request.principal)
+        return reply.code(400).send({ error: 'Invalid project.' });
+      try {
+        return await dependencies.projectManagement.setProjectArchived(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          true,
+          requestMetadata(request),
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/projects/:id/unarchive',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('project.manage')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.projectManagement || !request.principal)
+        return reply.code(400).send({ error: 'Invalid project.' });
+      try {
+        return await dependencies.projectManagement.setProjectArchived(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          false,
+          requestMetadata(request),
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  // Shared labels are workspace configuration (`project.manage`). Project-scoped
+  // labels are issue metadata, so members with `issue.edit` may maintain them.
+  app.post(
+    '/v1/labels',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const input = labelCreateRequestSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid label input.' });
+      if (!request.principal?.can(input.data.projectId ? 'issue.edit' : 'project.manage')) {
+        return reply.code(403).send({ error: 'You do not have this capability.' });
+      }
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.projectManagement.createLabel(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              input.data,
+              requestMetadata(request),
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.get('/v1/labels', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    if (!dependencies.projectManagement || !request.principal)
+      return reply.code(503).send({ error: 'Project management is not configured.' });
+    const query = request.query as { cursor?: string; limit?: string };
+    const pagination = page(query);
+    return dependencies.projectManagement.listLabels(
+      request.principal.workspaceId,
+      pagination.cursor,
+      pagination.limit,
+    );
+  });
+
+  app.patch(
+    '/v1/labels/:id',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = labelUpdateRequestSchema.safeParse(request.body);
+      if (!id || !input.success || !dependencies.projectManagement || !request.principal)
+        return reply.code(400).send({ error: 'Invalid label input.' });
+      try {
+        const label = await dependencies.projectManagement.getLabel(
+          request.principal.workspaceId,
+          id,
+        );
+        if (!request.principal.can(label.projectId ? 'issue.edit' : 'project.manage'))
+          return reply.code(403).send({ error: 'You do not have this capability.' });
+        return await dependencies.projectManagement.updateLabel(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          input.data,
+          requestMetadata(request),
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.delete(
+    '/v1/labels/:id',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.projectManagement || !request.principal)
+        return reply.code(400).send({ error: 'Invalid label.' });
+      try {
+        const label = await dependencies.projectManagement.getLabel(
+          request.principal.workspaceId,
+          id,
+        );
+        if (!request.principal.can(label.projectId ? 'issue.edit' : 'project.manage'))
+          return reply.code(403).send({ error: 'You do not have this capability.' });
+        await dependencies.projectManagement.deleteLabel(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
           requestMetadata(request),
         );
         return reply.code(204).send();

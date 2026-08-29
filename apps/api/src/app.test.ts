@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CoreRole } from '@promaly/domain';
 import type { IdentityService } from './identity.js';
+import type { ProjectManagementService } from './project-management.js';
 import type { TenancyService } from './tenancy.js';
 import { requireCapability } from './principal.js';
 import { buildApp, buildMetricsApp, createMetricsState } from './app.js';
@@ -42,10 +43,15 @@ const session = {
   ],
 };
 
-function buildTestApp(identity?: IdentityService, tenancy?: TenancyService) {
+function buildTestApp(
+  identity?: IdentityService,
+  tenancy?: TenancyService,
+  projectManagement?: ProjectManagementService,
+) {
   return buildApp(config, {
     identity,
     tenancy,
+    projectManagement,
     readinessChecks: {
       database: async () => undefined,
       objectStorage: async () => undefined,
@@ -105,6 +111,12 @@ function tenancyMock(overrides: Partial<TenancyService> = {}): TenancyService {
     })),
     ...overrides,
   } as TenancyService;
+}
+
+function projectManagementMock(): ProjectManagementService {
+  return {
+    createProject: vi.fn(async () => ({ id: 'project-1', key: 'CORE', name: 'Core' })),
+  } as unknown as ProjectManagementService;
 }
 
 async function csrf(app: Awaited<ReturnType<typeof buildTestApp>>) {
@@ -447,5 +459,31 @@ describe('tenancy endpoints', () => {
     const response = await app.inject({ method: 'GET', url: '/v1/members', headers: wsHeaders });
     expect(response.statusCode).toBe(200);
     await app.close();
+  });
+});
+
+describe('project-management authorization', () => {
+  it('gates project creation and hides foreign workspaces', async () => {
+    for (const [role, workspace, status] of [
+      ['member', workspaceId, 403],
+      ['owner', workspaceId, 201],
+      ['owner', '00000000-0000-0000-0000-000000000000', 404],
+    ] as const) {
+      const management = projectManagementMock();
+      const app = await buildTestApp(identityAs(role), undefined, management);
+      const { cookie, token } = await csrf(app);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/projects',
+        headers: {
+          cookie: `${cookie}; promaly_session=t`,
+          'x-csrf-token': token,
+          'x-workspace-id': workspace,
+        },
+        payload: { key: 'CORE', name: 'Core' },
+      });
+      expect(response.statusCode).toBe(status);
+      await app.close();
+    }
   });
 });

@@ -33,6 +33,20 @@ const KNOWN_NOOP_EVENTS = new Set([
   'membership.changed',
   'workspace.updated',
   'workspace.deleted',
+  'team.created',
+  'team.updated',
+  'team.deleted',
+  'team.members.changed',
+  'workflow.created',
+  'workflow.updated',
+  'workflow.state.changed',
+  'project.created',
+  'project.updated',
+  'project.archived',
+  'project.unarchived',
+  'label.created',
+  'label.updated',
+  'label.deleted',
 ]);
 const MAX_ATTEMPTS = 8;
 const MAX_BACKOFF_SECONDS = 300;
