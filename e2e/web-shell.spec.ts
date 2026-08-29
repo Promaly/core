@@ -16,19 +16,25 @@ async function mockSession(page: Page) {
   );
 }
 
-test('empty workspace shell opens the palette and navigates', async ({ page }) => {
+test('the shell renders, opens the command palette, and navigates', async ({ page }) => {
   await mockSession(page);
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
+  const topbar = page.locator('header');
+  await expect(topbar.getByRole('heading', { name: 'Projects' })).toBeVisible();
+
   await page.getByRole('button', { name: /search/i }).click();
-  await expect(page.getByLabel('Command palette')).toBeVisible();
-  await page.getByText('My work', { exact: true }).last().click();
-  await expect(page.getByRole('heading', { name: 'My work' })).toBeVisible();
+  await expect(page.getByPlaceholder(/type a command or search/i)).toBeVisible();
+
+  await page.getByRole('option', { name: /my work/i }).click();
+  await expect(topbar.getByRole('heading', { name: 'My work' })).toBeVisible();
 });
 
-test('theme toggle changes the document theme', async ({ page }) => {
+test('the command palette toggles the document theme', async ({ page }) => {
   await mockSession(page);
   await page.goto('/');
-  await page.getByRole('button', { name: /theme:/i }).click();
+
+  await page.getByRole('button', { name: /search/i }).click();
+  await page.getByRole('option', { name: /toggle theme/i }).click();
+
   await expect(page.locator('html')).toHaveAttribute('data-theme', /dark|light/);
 });
