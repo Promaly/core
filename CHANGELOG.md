@@ -1,3 +1,15 @@
+# [0.4.0](https://github.com/Promaly/core/compare/v0.3.0...v0.4.0) (2026-08-29)
+
+
+### Bug Fixes
+
+* **phase-1:** close S2 auth gaps, fix rate limiting, add route tests [S2] ([f2abbed](https://github.com/Promaly/core/commit/f2abbed462f6291109fd9a11cc24c21f2297aab2))
+
+
+### Features
+
+* **phase-1:** implement identity and tenancy [S2] ([7f09cdf](https://github.com/Promaly/core/commit/7f09cdf141b28b2c87b6adad07922ca40be27008))
+
 # [0.3.0](https://github.com/Promaly/core/compare/v0.2.0...v0.3.0) (2026-08-29)
 
 
