@@ -4,7 +4,13 @@ export const PRIORITY_LABELS = ['No priority', 'Urgent', 'High', 'Medium', 'Low'
 export type Priority = 0 | 1 | 2 | 3 | 4;
 
 /** Priority glyph (interaction-spec §3). Greyscale-legible; label via title/aria. */
-export function PriorityIcon({ value, className }: { value: Priority; className?: string }) {
+export function PriorityIcon({
+  value,
+  className,
+}: {
+  value: Priority;
+  className?: string | undefined;
+}) {
   const label = PRIORITY_LABELS[value] ?? PRIORITY_LABELS[0];
   const bar = (x: number, h: number, on: boolean) => (
     <rect

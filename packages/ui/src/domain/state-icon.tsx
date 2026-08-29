@@ -12,8 +12,8 @@ export function StateIcon({
   className,
 }: {
   category: StateCategory;
-  color?: string;
-  className?: string;
+  color?: string | undefined;
+  className?: string | undefined;
 }) {
   const stroke = color ?? 'currentColor';
   return (

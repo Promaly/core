@@ -1,8 +1,12 @@
 import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
 import { Shell } from './shell.js';
 import { Invite, Login, Onboarding, Register, Reset, ResetConfirm } from './screens/auth.js';
-import { NewProjectScreen, PlaceholderScreen, ProjectsScreen } from './screens/app.js';
+import { NewProjectScreen, PlaceholderScreen } from './screens/app.js';
 import { KitchenSink } from './screens/kitchen-sink.js';
+import { BoardScreen } from './issues/board.js';
+import { IssueDetailScreen } from './issues/detail.js';
+import { IssueListScreen } from './issues/list.js';
+import { MyWorkScreen, ProjectsScreen, SearchScreen } from './issues/screens.js';
 
 const rootRoute = createRootRoute({ component: Shell });
 
@@ -14,22 +18,12 @@ const indexRoute = createRoute({
 const myWorkRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/my-work',
-  component: () => (
-    <PlaceholderScreen
-      title="My work"
-      note="Issues assigned to you land here with the S6 issue surface."
-    />
-  ),
+  component: MyWorkScreen,
 });
 const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search',
-  component: () => (
-    <PlaceholderScreen
-      title="Search"
-      note="Full-text issue search lands with the S6 issue surface."
-    />
-  ),
+  component: SearchScreen,
 });
 const notificationsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -55,6 +49,30 @@ const newProjectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/projects/new',
   component: NewProjectScreen,
+});
+const projectIssuesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectKey',
+  component: function ProjectIssues() {
+    const { projectKey } = projectIssuesRoute.useParams();
+    return <IssueListScreen projectKey={projectKey} />;
+  },
+});
+const projectBoardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectKey/board',
+  component: function ProjectBoard() {
+    const { projectKey } = projectBoardRoute.useParams();
+    return <BoardScreen projectKey={projectKey} />;
+  },
+});
+const issueDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/issues/$issueId',
+  component: function IssueDetail() {
+    const { issueId } = issueDetailRoute.useParams();
+    return <IssueDetailScreen issueId={issueId} />;
+  },
 });
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -99,6 +117,9 @@ const routeTree = rootRoute.addChildren([
   notificationsRoute,
   adminRoute,
   newProjectRoute,
+  projectBoardRoute,
+  projectIssuesRoute,
+  issueDetailRoute,
   loginRoute,
   registerRoute,
   resetRoute,

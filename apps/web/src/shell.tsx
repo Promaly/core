@@ -24,11 +24,13 @@ import {
   ChevronsUpDown,
   FolderKanban,
   PanelLeft,
+  Plus,
   Search as SearchIcon,
   SquareUser,
 } from 'lucide-react';
 import { authApi } from './api.js';
 import { CommandPalette, useCommandPalette } from './command-palette.js';
+import { useProjects } from './issues/data.js';
 import { useSession, useSessionActions } from './session.js';
 
 const PUBLIC_PREFIXES = [
@@ -227,12 +229,7 @@ function Sidebar({
         })}
       </nav>
 
-      {!collapsed && (
-        <div className="mt-4 px-2 text-xs font-medium uppercase tracking-wide text-faint">
-          Projects
-        </div>
-      )}
-      {!collapsed && <p className="px-2 py-1 text-[13px] text-faint">No projects yet.</p>}
+      {!collapsed && <SidebarProjects pathname={pathname} />}
 
       <div className="mt-auto">
         {collapsed && (
@@ -242,6 +239,58 @@ function Sidebar({
         )}
       </div>
     </aside>
+  );
+}
+
+function SidebarProjects({ pathname }: { pathname: string }) {
+  const projects = useProjects();
+  return (
+    <div className="mt-4 flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between px-2 py-1">
+        <span className="text-xs font-medium uppercase tracking-wide text-faint">Projects</span>
+        <Link
+          to="/projects/new"
+          aria-label="New project"
+          className="text-faint hover:text-foreground"
+        >
+          <Plus className="size-3.5" />
+        </Link>
+      </div>
+      <div className="flex flex-col gap-0.5 overflow-y-auto">
+        {projects.data?.length ? (
+          projects.data.map((project) => {
+            const to = `/projects/${project.key}`;
+            const active = pathname.startsWith(to);
+            return (
+              <Link
+                key={project.id}
+                to="/projects/$projectKey"
+                params={{ projectKey: project.key }}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px]',
+                  active
+                    ? 'bg-secondary font-medium text-foreground'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                )}
+              >
+                <span
+                  className="flex size-4 shrink-0 items-center justify-center rounded text-[9px] font-semibold text-primary-foreground"
+                  style={{ background: project.color ?? 'var(--primary)' }}
+                >
+                  {project.key.slice(0, 1)}
+                </span>
+                <span className="truncate">{project.name}</span>
+              </Link>
+            );
+          })
+        ) : (
+          <p className="px-2 py-1 text-[13px] text-faint">
+            {projects.isPending ? 'Loading…' : 'No projects yet.'}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
