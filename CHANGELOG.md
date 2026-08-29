@@ -1,3 +1,10 @@
+## [0.7.1](https://github.com/Promaly/core/compare/v0.7.0...v0.7.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **compose:** stop postgres/minio choking on an injected password var ([8e46cbc](https://github.com/Promaly/core/commit/8e46cbcb0d057ec6d5940e703dcb9007fe49f235))
+
 # [0.7.0](https://github.com/Promaly/core/compare/v0.6.0...v0.7.0) (2026-08-29)
 
 
