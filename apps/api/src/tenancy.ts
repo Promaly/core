@@ -7,6 +7,7 @@ import {
   accounts,
   auditEvents,
   emit,
+  isUniqueViolation,
   type DatabaseClient,
   workspaceInvitations,
   workspaceMembers,
@@ -69,12 +70,7 @@ export function createTenancyService(database: DatabaseClient) {
           }),
         );
       } catch (error) {
-        if (
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === '23505'
-        ) {
+        if (isUniqueViolation(error)) {
           throw new ConflictError('This workspace URL is already in use.');
         }
         throw error;
@@ -118,12 +114,7 @@ export function createTenancyService(database: DatabaseClient) {
           return workspace;
         });
       } catch (error) {
-        if (
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === '23505'
-        ) {
+        if (isUniqueViolation(error)) {
           throw new ConflictError('This workspace URL is already in use.');
         }
         throw error;

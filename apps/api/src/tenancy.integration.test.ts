@@ -183,4 +183,18 @@ describe.skipIf(!shouldRun)('identity and tenancy lifecycle', () => {
     );
     await expect(identity.getSession(first.token.value)).resolves.toBeNull();
   });
+
+  it('surfaces a workspace slug collision as a ConflictError, not a 500', async () => {
+    const identity = createIdentityService(database);
+    const tenancy = createTenancyService(database);
+    const owner = await identity.register(
+      { email: 'slug@example.com', password: 'a-very-secure-password', workspaceName: 'Slug One' },
+      {},
+    );
+    const takenSlug = owner.workspaces[0]!.slug;
+
+    await expect(
+      tenancy.createWorkspace(owner.account.id, { name: 'Slug Two', slug: takenSlug }, {}),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
 });
