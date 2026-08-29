@@ -3,6 +3,7 @@ import {
   accounts,
   auditEvents,
   emit,
+  isUniqueViolation,
   issues,
   labels,
   projectIssueCounters,
@@ -24,10 +25,6 @@ type StateCategory = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancel
 
 export class WorkflowInvariantError extends Error {}
 export class ProjectKeyLockedError extends Error {}
-
-function isUniqueViolation(error: unknown) {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
-}
 
 async function audit(
   tx: DbTransaction,
@@ -116,6 +113,20 @@ async function requireWorkflow(tx: DbTransaction, workspaceId: string, workflowI
   return workflow;
 }
 
+/** A workflow a project can actually run on: it has at least one started and one completed state. */
+async function requireUsableWorkflow(tx: DbTransaction, workflowId: string) {
+  const rows = await tx
+    .select({ category: workflowStates.category })
+    .from(workflowStates)
+    .where(eq(workflowStates.workflowId, workflowId));
+  const has = (category: StateCategory) => rows.some((row) => row.category === category);
+  if (!has('started') || !has('completed')) {
+    throw new WorkflowInvariantError(
+      'A project workflow needs at least one started and one completed state.',
+    );
+  }
+}
+
 async function requireProject(tx: DbTransaction, workspaceId: string, projectId: string) {
   const project = (
     await tx
@@ -175,6 +186,26 @@ export function createProjectManagementService(database: DatabaseClient) {
         throw error;
       }
       return { id, name: input.name.trim(), key: input.key };
+    },
+
+    async getTeam(workspaceId: string, teamId: string) {
+      return db.transaction((tx) => requireTeam(tx, workspaceId, teamId));
+    },
+
+    async getWorkflow(workspaceId: string, workflowId: string) {
+      return db.transaction(async (tx) => {
+        const workflow = await requireWorkflow(tx, workspaceId, workflowId);
+        const states = await tx
+          .select()
+          .from(workflowStates)
+          .where(eq(workflowStates.workflowId, workflowId))
+          .orderBy(asc(workflowStates.position));
+        return { ...workflow, states };
+      });
+    },
+
+    async getProject(workspaceId: string, projectId: string) {
+      return db.transaction((tx) => requireProject(tx, workspaceId, projectId));
     },
 
     async listTeams(workspaceId: string, cursor?: string, limit = 50) {
@@ -539,14 +570,21 @@ export function createProjectManagementService(database: DatabaseClient) {
             'State order must contain every workflow state exactly once.',
           );
         }
-        await Promise.all(
-          stateIds.map((id, position) =>
-            tx
-              .update(workflowStates)
-              .set({ position })
-              .where(and(eq(workflowStates.workflowId, workflowId), eq(workflowStates.id, id))),
-          ),
-        );
+        // Two phases: the (workflow_id, position) unique index rejects any
+        // transient collision, so first park every state in a disjoint negative
+        // range, then assign the final 0..n-1 positions.
+        for (const [index, id] of stateIds.entries()) {
+          await tx
+            .update(workflowStates)
+            .set({ position: -1 - index })
+            .where(and(eq(workflowStates.workflowId, workflowId), eq(workflowStates.id, id)));
+        }
+        for (const [position, id] of stateIds.entries()) {
+          await tx
+            .update(workflowStates)
+            .set({ position })
+            .where(and(eq(workflowStates.workflowId, workflowId), eq(workflowStates.id, id)));
+        }
         await audit(tx, {
           workspaceId,
           actorId,
@@ -590,6 +628,7 @@ export function createProjectManagementService(database: DatabaseClient) {
                   .limit(1)
               )[0];
           if (!workflow) throw new WorkflowInvariantError('A project needs a workspace workflow.');
+          await requireUsableWorkflow(tx, workflow.id);
           const created = await tx
             .insert(projects)
             .values({
@@ -660,7 +699,10 @@ export function createProjectManagementService(database: DatabaseClient) {
       try {
         return await db.transaction(async (tx) => {
           const existing = await requireProject(tx, workspaceId, projectId);
-          if (input.key && input.key !== existing.key) {
+          const changesKey = Boolean(input.key) && input.key !== existing.key;
+          const changesWorkflow =
+            Boolean(input.workflowId) && input.workflowId !== existing.workflowId;
+          if (changesKey || changesWorkflow) {
             const anyIssue = (
               await tx
                 .select({ id: issues.id })
@@ -668,12 +710,21 @@ export function createProjectManagementService(database: DatabaseClient) {
                 .where(eq(issues.projectId, projectId))
                 .limit(1)
             )[0];
-            if (anyIssue)
+            if (anyIssue && changesKey) {
               throw new ProjectKeyLockedError('A project key cannot change after its first issue.');
+            }
+            if (anyIssue && changesWorkflow) {
+              throw new ProjectKeyLockedError(
+                'A project workflow cannot change after its first issue.',
+              );
+            }
           }
           if (input.teamId) await requireTeam(tx, workspaceId, input.teamId);
           if (input.leadId) await requireMember(tx, workspaceId, input.leadId);
-          if (input.workflowId) await requireWorkflow(tx, workspaceId, input.workflowId);
+          if (input.workflowId) {
+            await requireWorkflow(tx, workspaceId, input.workflowId);
+            await requireUsableWorkflow(tx, input.workflowId);
+          }
           const updated = await tx
             .update(projects)
             .set({ ...input, name: input.name?.trim() })

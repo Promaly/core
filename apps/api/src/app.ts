@@ -692,6 +692,23 @@ export async function buildApp(
     },
   );
 
+  app.get(
+    '/v1/teams/:id',
+    { preHandler: [app.requireWorkspace, requireCapability('project.manage')] },
+    async (request, reply) => {
+      if (!dependencies.projectManagement || !request.principal)
+        return reply.code(503).send({ error: 'Project management is not configured.' });
+      try {
+        return await dependencies.projectManagement.getTeam(
+          request.principal.workspaceId,
+          (request.params as { id: string }).id,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
   app.patch(
     '/v1/teams/:id',
     {
@@ -821,6 +838,19 @@ export async function buildApp(
       pagination.cursor,
       pagination.limit,
     );
+  });
+
+  app.get('/v1/workflows/:id', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    if (!dependencies.projectManagement || !request.principal)
+      return reply.code(503).send({ error: 'Project management is not configured.' });
+    try {
+      return await dependencies.projectManagement.getWorkflow(
+        request.principal.workspaceId,
+        (request.params as { id: string }).id,
+      );
+    } catch (error) {
+      return tenancyFailure(error, reply);
+    }
   });
 
   app.post(
@@ -1026,6 +1056,19 @@ export async function buildApp(
       ...pagination,
       includeArchived: query.includeArchived === 'true',
     });
+  });
+
+  app.get('/v1/projects/:id', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    if (!dependencies.projectManagement || !request.principal)
+      return reply.code(503).send({ error: 'Project management is not configured.' });
+    try {
+      return await dependencies.projectManagement.getProject(
+        request.principal.workspaceId,
+        (request.params as { id: string }).id,
+      );
+    } catch (error) {
+      return tenancyFailure(error, reply);
+    }
   });
 
   app.patch(

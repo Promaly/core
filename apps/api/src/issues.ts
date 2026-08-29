@@ -8,7 +8,6 @@ import {
   ilike,
   inArray,
   isNull,
-  lt,
   or,
   sql,
   type SQL,
@@ -16,6 +15,7 @@ import {
 import {
   activityEvents,
   emit,
+  isUniqueViolation,
   issueLabels,
   issueRelations,
   issues,
@@ -46,9 +46,49 @@ type IssuePatch = {
   parentIssueId?: string | null | undefined;
   labelIds?: string[] | undefined;
 };
+type ListSort = 'manual' | 'priority' | 'updated' | 'created';
+type OrderableRow = {
+  sortKey: string;
+  priority: number;
+  updatedAt: Date;
+  createdAt: Date;
+  id: string;
+};
 
 export class RevisionConflictError extends Error {}
 export class IssueRelationError extends Error {}
+
+const SORT_COLUMN = {
+  manual: issues.sortKey,
+  priority: issues.priority,
+  updated: issues.updatedAt,
+  created: issues.createdAt,
+} as const;
+
+function sortValue(sort: ListSort, row: OrderableRow): string | number {
+  if (sort === 'manual') return row.sortKey;
+  if (sort === 'priority') return row.priority;
+  return (sort === 'updated' ? row.updatedAt : row.createdAt).toISOString();
+}
+
+function encodeIssueCursor(sort: ListSort, row: OrderableRow) {
+  return Buffer.from(JSON.stringify([sortValue(sort, row), row.id])).toString('base64url');
+}
+
+/** Keyset predicate that matches the same (sortColumn, id) ordering the list uses. */
+function issueCursorPredicate(sort: ListSort, cursor: string): SQL | undefined {
+  let parsed: [string | number, string];
+  try {
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+  } catch {
+    return undefined;
+  }
+  const [value, id] = parsed;
+  const column = SORT_COLUMN[sort];
+  return sort === 'manual'
+    ? sql`(${column}, ${issues.id}) > (${value}, ${id})`
+    : sql`(${column}, ${issues.id}) < (${value}, ${id})`;
+}
 
 async function findIssue(tx: DbTransaction, workspaceId: string, issueId: string) {
   const issue = (
@@ -97,6 +137,30 @@ async function defaultState(tx: DbTransaction, workflowId: string) {
   return state;
 }
 
+type StateCategory = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
+
+/**
+ * `started_at` is stamped once the issue first enters a started/completed state
+ * and never cleared. `completed_at` tracks the completed state exactly — set on
+ * entering, cleared on leaving (a reopen).
+ */
+function stateTimestamps(
+  category: StateCategory,
+  current: { startedAt: Date | null; completedAt: Date | null },
+) {
+  const now = new Date();
+  const patch: { startedAt?: Date | null; completedAt?: Date | null } = {};
+  if ((category === 'started' || category === 'completed') && current.startedAt === null) {
+    patch.startedAt = now;
+  }
+  if (category === 'completed') {
+    if (current.completedAt === null) patch.completedAt = now;
+  } else if (current.completedAt !== null) {
+    patch.completedAt = null;
+  }
+  return patch;
+}
+
 async function validateMember(
   tx: DbTransaction,
   workspaceId: string,
@@ -130,6 +194,23 @@ async function validateParent(
   const parent = await findIssue(tx, workspaceId, parentId);
   if (parent.projectId !== projectId)
     throw new ConflictError('A sub-issue must use the same project.');
+
+  // Walk the ancestor chain; reaching this issue would close a loop.
+  const seen = new Set<string>([parentId]);
+  let ancestor: string | null = parent.parentIssueId;
+  while (ancestor) {
+    if (ancestor === issueId) throw new ConflictError('A sub-issue cannot create a parent cycle.');
+    if (seen.has(ancestor)) break;
+    seen.add(ancestor);
+    const next = (
+      await tx
+        .select({ parentIssueId: issues.parentIssueId })
+        .from(issues)
+        .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, ancestor)))
+        .limit(1)
+    )[0];
+    ancestor = next?.parentIssueId ?? null;
+  }
 }
 
 async function validateLabels(
@@ -342,12 +423,7 @@ export function createIssuesService(database: DatabaseClient) {
           assigneeId: input.assigneeId,
           parentIssueId: input.parentIssueId,
           revision: current.revision + 1,
-          startedAt:
-            state?.category === 'started' && current.startedAt === null ? new Date() : undefined,
-          completedAt:
-            state?.category === 'completed' && current.completedAt === null
-              ? new Date()
-              : undefined,
+          ...(state ? stateTimestamps(state.category, current) : {}),
         })
         .where(
           and(
@@ -433,14 +509,19 @@ export function createIssuesService(database: DatabaseClient) {
       if (options.priorities?.length) predicates.push(inArray(issues.priority, options.priorities));
       if (options.parentId) predicates.push(eq(issues.parentIssueId, options.parentId));
       if (options.updatedSince) predicates.push(gte(issues.updatedAt, options.updatedSince));
-      if (options.cursor) predicates.push(lt(issues.id, options.cursor));
-      if (options.query)
+      if (options.cursor) {
+        const predicate = issueCursorPredicate(options.sort, options.cursor);
+        if (predicate) predicates.push(predicate);
+      }
+      if (options.query) {
+        // Full-text on the generated tsvector (GIN), with a trigram-indexed
+        // title fallback for partial words. Never a description seq-scan.
         predicates.push(
-          or(
-            ilike(issues.title, `%${options.query}%`),
-            ilike(issues.description, `%${options.query}%`),
-          )!,
+          sql`(${issues.searchTsv} @@ websearch_to_tsquery('english', ${options.query}) or ${
+            issues.title
+          } ilike ${`%${options.query}%`})`,
         );
+      }
       if (options.labelIds?.length) {
         predicates.push(
           sql`exists (select 1 from issue_labels where ${and(
@@ -496,9 +577,11 @@ export function createIssuesService(database: DatabaseClient) {
         counts[key] = (counts[key] ?? 0) + 1;
         return counts;
       }, {});
+      const last = rows.at(-1);
       return {
         items,
-        nextCursor: rows.length === options.limit ? (rows.at(-1)?.id ?? null) : null,
+        nextCursor:
+          last && rows.length === options.limit ? encodeIssueCursor(options.sort, last) : null,
         groupCounts,
       };
     },
@@ -574,13 +657,7 @@ export function createIssuesService(database: DatabaseClient) {
           });
         });
       } catch (error) {
-        if (
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === '23505'
-        )
-          throw new ConflictError('This relation already exists.');
+        if (isUniqueViolation(error)) throw new ConflictError('This relation already exists.');
         throw error;
       }
       return { id, sourceIssueId: sourceId, targetIssueId: targetId, type };
@@ -613,10 +690,26 @@ export function createIssuesService(database: DatabaseClient) {
       actorId: string,
       updates: Array<{ id: string; revision: number } & IssuePatch>,
     ) {
+      // Each item is its own transaction; a failure is reported per item rather
+      // than aborting the whole batch (callers reconcile with the returned map).
       const results = [];
       for (const update of updates) {
         const { id, revision, ...input } = update;
-        results.push(await updateIssue(workspaceId, actorId, id, revision, input));
+        try {
+          const issue = await updateIssue(workspaceId, actorId, id, revision, input);
+          results.push({ id, ok: true as const, issue });
+        } catch (error) {
+          const reason =
+            error instanceof RevisionConflictError
+              ? 'revision_conflict'
+              : error instanceof TenancyNotFoundError
+                ? 'not_found'
+                : error instanceof ConflictError
+                  ? 'conflict'
+                  : 'error';
+          if (reason === 'error') throw error;
+          results.push({ id, ok: false as const, reason });
+        }
       }
       return results;
     },
@@ -638,7 +731,7 @@ export function createIssuesService(database: DatabaseClient) {
           throw new RevisionConflictError('Issue revision does not match.');
         const project = await findProject(tx, workspaceId, issue.projectId);
         const targetStateId = input.stateId ?? issue.stateId;
-        await validateState(tx, project.workflowId, targetStateId);
+        const targetState = await validateState(tx, project.workflowId, targetStateId);
         const siblings = (
           await tx
             .select()
@@ -680,7 +773,12 @@ export function createIssuesService(database: DatabaseClient) {
         }
         const updated = await tx
           .update(issues)
-          .set({ stateId: targetStateId, sortKey: key, revision: revision + 1 })
+          .set({
+            stateId: targetStateId,
+            sortKey: key,
+            revision: revision + 1,
+            ...stateTimestamps(targetState.category, issue),
+          })
           .where(
             and(
               eq(issues.workspaceId, workspaceId),
