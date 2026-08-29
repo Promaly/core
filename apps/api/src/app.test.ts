@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CoreRole } from '@promaly/domain';
 import type { IdentityService } from './identity.js';
 import type { ProjectManagementService } from './project-management.js';
+import type { IssuesService } from './issues.js';
 import type { TenancyService } from './tenancy.js';
 import { requireCapability } from './principal.js';
 import { buildApp, buildMetricsApp, createMetricsState } from './app.js';
@@ -47,11 +48,13 @@ function buildTestApp(
   identity?: IdentityService,
   tenancy?: TenancyService,
   projectManagement?: ProjectManagementService,
+  issues?: IssuesService,
 ) {
   return buildApp(config, {
     identity,
     tenancy,
     projectManagement,
+    issues,
     readinessChecks: {
       database: async () => undefined,
       objectStorage: async () => undefined,
@@ -117,6 +120,12 @@ function projectManagementMock(): ProjectManagementService {
   return {
     createProject: vi.fn(async () => ({ id: 'project-1', key: 'CORE', name: 'Core' })),
   } as unknown as ProjectManagementService;
+}
+
+function issuesMock(): IssuesService {
+  return {
+    createIssue: vi.fn(async () => ({ id: 'issue-1', revision: 1, number: 1 })),
+  } as unknown as IssuesService;
 }
 
 async function csrf(app: Awaited<ReturnType<typeof buildTestApp>>) {
@@ -481,6 +490,31 @@ describe('project-management authorization', () => {
           'x-workspace-id': workspace,
         },
         payload: { key: 'CORE', name: 'Core' },
+      });
+      expect(response.statusCode).toBe(status);
+      await app.close();
+    }
+  });
+});
+
+describe('issue authorization', () => {
+  it('gates creation by issue.create and hides a foreign workspace', async () => {
+    for (const [role, requestedWorkspace, status] of [
+      ['guest', workspaceId, 403],
+      ['member', workspaceId, 201],
+      ['member', '00000000-0000-0000-0000-000000000000', 404],
+    ] as const) {
+      const app = await buildTestApp(identityAs(role), undefined, undefined, issuesMock());
+      const { cookie, token } = await csrf(app);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/issues',
+        headers: {
+          cookie: `${cookie}; promaly_session=t`,
+          'x-csrf-token': token,
+          'x-workspace-id': requestedWorkspace,
+        },
+        payload: { projectId: workspaceId, title: 'Issue' },
       });
       expect(response.statusCode).toBe(status);
       await app.close();

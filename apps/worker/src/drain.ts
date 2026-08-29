@@ -47,6 +47,12 @@ const KNOWN_NOOP_EVENTS = new Set([
   'label.created',
   'label.updated',
   'label.deleted',
+  'issue.created',
+  'issue.updated',
+  'issue.archived',
+  'issue.moved',
+  'issue.relation.created',
+  'issue.relation.deleted',
 ]);
 const MAX_ATTEMPTS = 8;
 const MAX_BACKOFF_SECONDS = 300;

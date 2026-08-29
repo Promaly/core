@@ -184,6 +184,54 @@ export const labelUpdateRequestSchema = labelCreateRequestSchema
     'Label changes required.',
   );
 
+export const issuePrioritySchema = z.int().min(0).max(4);
+export const issueCreateRequestSchema = z.object({
+  projectId: z.uuid(),
+  title: z.string().trim().min(1).max(500),
+  description: z.string().max(100_000).optional(),
+  stateId: z.uuid().optional(),
+  priority: issuePrioritySchema.optional(),
+  assigneeId: z.uuid().nullable().optional(),
+  parentIssueId: z.uuid().nullable().optional(),
+  labelIds: z.array(z.uuid()).max(50).optional(),
+});
+export const issueUpdateRequestSchema = issueCreateRequestSchema
+  .omit({ projectId: true })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, 'Issue changes required.');
+export const issueArchiveRequestSchema = z.object({});
+export const issueRelationTypeSchema = z.enum(['blocks', 'relates_to', 'duplicates']);
+export const issueRelationCreateRequestSchema = z.object({
+  targetIssueId: z.uuid(),
+  type: issueRelationTypeSchema,
+});
+export const issueBulkRequestSchema = z.object({
+  issues: z
+    .array(
+      z.object({
+        id: z.uuid(),
+        revision: z.int().positive(),
+        stateId: z.uuid().optional(),
+        assigneeId: z.uuid().nullable().optional(),
+        priority: issuePrioritySchema.optional(),
+        labelIds: z.array(z.uuid()).max(50).optional(),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+export const issueMoveRequestSchema = z
+  .object({
+    beforeId: z.uuid().optional(),
+    afterId: z.uuid().optional(),
+    stateId: z.uuid().optional(),
+  })
+  .refine(
+    (value) =>
+      value.beforeId !== undefined || value.afterId !== undefined || value.stateId !== undefined,
+    'A destination is required.',
+  );
+
 export const phase1EventTypes = [
   'workspace.created',
   'workflow.seeded',
@@ -209,5 +257,11 @@ export const phase1EventTypes = [
   'label.created',
   'label.updated',
   'label.deleted',
+  'issue.created',
+  'issue.updated',
+  'issue.archived',
+  'issue.moved',
+  'issue.relation.created',
+  'issue.relation.deleted',
 ] as const;
 export type Phase1EventType = (typeof phase1EventTypes)[number];

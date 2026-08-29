@@ -10,6 +10,11 @@ import {
   healthResponseSchema,
   invitationAcceptRequestSchema,
   invitationRequestSchema,
+  issueBulkRequestSchema,
+  issueCreateRequestSchema,
+  issueMoveRequestSchema,
+  issueRelationCreateRequestSchema,
+  issueUpdateRequestSchema,
   labelCreateRequestSchema,
   labelUpdateRequestSchema,
   loginRequestSchema,
@@ -41,6 +46,12 @@ import {
 } from './identity.js';
 import { createPrincipalPreHandler, requireCapability } from './principal.js';
 import {
+  createIssuesService,
+  IssueRelationError,
+  RevisionConflictError,
+  type IssuesService,
+} from './issues.js';
+import {
   createProjectManagementService,
   ProjectKeyLockedError,
   type ProjectManagementService,
@@ -65,6 +76,7 @@ type AppDependencies = {
   identity: IdentityService | undefined;
   tenancy?: TenancyService | undefined;
   projectManagement?: ProjectManagementService | undefined;
+  issues?: IssuesService | undefined;
 };
 
 export type MetricsState = {
@@ -112,6 +124,7 @@ function createAppDependencies(config: AppConfig): AppDependencies {
     identity: database ? createIdentityService(database) : undefined,
     tenancy: database ? createTenancyService(database) : undefined,
     projectManagement: database ? createProjectManagementService(database) : undefined,
+    issues: database ? createIssuesService(database) : undefined,
     readinessChecks: {
       async database() {
         if (!database) {
@@ -194,7 +207,9 @@ export async function buildApp(
       error instanceof LastOwnerError ||
       error instanceof ConflictError ||
       error instanceof WorkflowInvariantError ||
-      error instanceof ProjectKeyLockedError
+      error instanceof ProjectKeyLockedError ||
+      error instanceof RevisionConflictError ||
+      error instanceof IssueRelationError
     ) {
       return reply.code(409).send({ error: error.message });
     }
@@ -208,6 +223,10 @@ export async function buildApp(
       cursor: query.cursor,
       limit: Number.isInteger(requested) ? Math.max(1, Math.min(100, requested)) : 50,
     };
+  };
+  const ifMatch = (request: { headers: { 'if-match'?: string | undefined } }) => {
+    const revision = Number(request.headers['if-match']);
+    return Number.isInteger(revision) && revision > 0 ? revision : undefined;
   };
 
   // Registrations are awaited: @fastify/rate-limit only wires its hooks once it
@@ -1179,6 +1198,288 @@ export async function buildApp(
       }
     },
   );
+
+  app.post(
+    '/v1/issues',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('issue.create')],
+    },
+    async (request, reply) => {
+      const input = issueCreateRequestSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid issue input.' });
+      if (!dependencies.issues || !request.principal)
+        return reply.code(503).send({ error: 'Issues are not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.issues.createIssue(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              input.data,
+              requestMetadata(request),
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.get('/v1/issues/:id', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    const id = (request.params as { id?: string }).id;
+    if (!id || !dependencies.issues || !request.principal)
+      return reply.code(400).send({ error: 'Invalid issue.' });
+    try {
+      return await dependencies.issues.getIssue(request.principal.workspaceId, id);
+    } catch (error) {
+      return tenancyFailure(error, reply);
+    }
+  });
+
+  app.patch(
+    '/v1/issues/:id',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace, requireCapability('issue.edit')] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const revision = ifMatch(request);
+      const input = issueUpdateRequestSchema.safeParse(request.body);
+      if (!id || !revision || !input.success)
+        return reply
+          .code(400)
+          .send({ error: 'A valid If-Match revision and issue changes are required.' });
+      if (!dependencies.issues || !request.principal)
+        return reply.code(503).send({ error: 'Issues are not configured.' });
+      try {
+        return await dependencies.issues.updateIssue(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          revision,
+          input.data,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/issues/:id/archive',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace, requireCapability('issue.edit')] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const revision = ifMatch(request);
+      if (!id || !revision || !dependencies.issues || !request.principal)
+        return reply.code(400).send({ error: 'A valid If-Match revision is required.' });
+      try {
+        return await dependencies.issues.archiveIssue(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          revision,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.get('/v1/issues', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    if (!dependencies.issues || !request.principal)
+      return reply.code(503).send({ error: 'Issues are not configured.' });
+    const query = request.query as Record<string, string | undefined>;
+    const pagination = page(query);
+    const split = (value: string | undefined) => value?.split(',').filter(Boolean);
+    const priorities = split(query.priority)
+      ?.map(Number)
+      .filter((value) => Number.isInteger(value) && value >= 0 && value <= 4);
+    const updatedSince = query.updatedSince ? new Date(query.updatedSince) : undefined;
+    if (updatedSince && Number.isNaN(updatedSince.getTime()))
+      return reply.code(400).send({ error: 'Invalid updatedSince timestamp.' });
+    return dependencies.issues.listIssues(request.principal.workspaceId, {
+      projectId: query.projectId,
+      stateIds: split(query.stateId),
+      assigneeIds: split(query.assigneeId),
+      labelIds: split(query.labelId),
+      priorities,
+      parentId: query.parentId,
+      query: query.q,
+      updatedSince,
+      cursor: pagination.cursor,
+      limit: pagination.limit,
+      sort:
+        query.sort === 'manual' || query.sort === 'priority' || query.sort === 'created'
+          ? query.sort
+          : 'updated',
+      groupBy:
+        query.groupBy === 'state' ||
+        query.groupBy === 'assignee' ||
+        query.groupBy === 'priority' ||
+        query.groupBy === 'label'
+          ? query.groupBy
+          : 'none',
+    });
+  });
+
+  app.post(
+    '/v1/issues/:id/subissues',
+    {
+      onRequest: requireCsrf,
+      preHandler: [app.requireWorkspace, requireCapability('issue.create')],
+    },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = issueCreateRequestSchema.omit({ projectId: true }).safeParse(request.body);
+      if (!id || !input.success) return reply.code(400).send({ error: 'Invalid sub-issue input.' });
+      if (!dependencies.issues || !request.principal)
+        return reply.code(503).send({ error: 'Issues are not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.issues.createSubIssue(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              id,
+              input.data,
+              requestMetadata(request),
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.get(
+    '/v1/issues/:id/subissues',
+    { preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.issues || !request.principal)
+        return reply.code(400).send({ error: 'Invalid issue.' });
+      const pagination = page(request.query as { cursor?: string; limit?: string });
+      try {
+        return await dependencies.issues.listSubIssues(
+          request.principal.workspaceId,
+          id,
+          pagination.cursor,
+          pagination.limit,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/issues/:id/relations',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace, requireCapability('issue.edit')] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = issueRelationCreateRequestSchema.safeParse(request.body);
+      if (!id || !input.success) return reply.code(400).send({ error: 'Invalid relation input.' });
+      if (!dependencies.issues || !request.principal)
+        return reply.code(503).send({ error: 'Issues are not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.issues.createRelation(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              id,
+              input.data.targetIssueId,
+              input.data.type,
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.delete(
+    '/v1/relations/:id',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace, requireCapability('issue.edit')] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.issues || !request.principal)
+        return reply.code(400).send({ error: 'Invalid relation.' });
+      try {
+        await dependencies.issues.deleteRelation(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/issues/bulk',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace, requireCapability('issue.edit')] },
+    async (request, reply) => {
+      const input = issueBulkRequestSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid bulk issue input.' });
+      if (!dependencies.issues || !request.principal)
+        return reply.code(503).send({ error: 'Issues are not configured.' });
+      try {
+        return await dependencies.issues.bulkUpdate(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          input.data.issues,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/issues/:id/move',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace, requireCapability('issue.edit')] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const expected = ifMatch(request);
+      const input = issueMoveRequestSchema.safeParse(request.body);
+      if (!id || !expected || !input.success)
+        return reply
+          .code(400)
+          .send({ error: 'A valid If-Match revision and move destination are required.' });
+      if (!dependencies.issues || !request.principal)
+        return reply.code(503).send({ error: 'Issues are not configured.' });
+      try {
+        return await dependencies.issues.moveIssue(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          expected,
+          input.data,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.get('/v1/search/issues', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    const query = request.query as { q?: string; limit?: string };
+    if (!query.q?.trim()) return reply.code(400).send({ error: 'A search query is required.' });
+    if (!dependencies.issues || !request.principal)
+      return reply.code(503).send({ error: 'Issues are not configured.' });
+    const requested = Number(query.limit ?? 20);
+    return dependencies.issues.searchIssues(
+      request.principal.workspaceId,
+      query.q.trim(),
+      Number.isInteger(requested) ? Math.max(1, Math.min(100, requested)) : 20,
+    );
+  });
 
   return app;
 }
