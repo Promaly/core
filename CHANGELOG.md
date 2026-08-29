@@ -1,3 +1,17 @@
+# [0.6.0](https://github.com/Promaly/core/compare/v0.5.0...v0.6.0) (2026-08-29)
+
+
+### Bug Fixes
+
+* **ci:** unblock the container build and e2e job for the web foundation ([9be21b0](https://github.com/Promaly/core/commit/9be21b03b399fc5a359d15c7a0a3c8673de1da8e))
+
+
+### Features
+
+* **phase-1:** add web foundation [S5] ([a9ebcd8](https://github.com/Promaly/core/commit/a9ebcd89b1f031e49c1ca79d8aa4ac3483d2a51d))
+* **phase-1:** complete S5 auth bootstrap ([b9903ad](https://github.com/Promaly/core/commit/b9903ad8cbcfeafe7ff515b94a2576e5aa147fb1))
+* **web:** rebuild the UI foundation on shadcn/ui + Tailwind v4 [S5] ([d99b482](https://github.com/Promaly/core/commit/d99b48225ac9dd7fb4115e5cf62d4fe9cb44f054))
+
 # [0.5.0](https://github.com/Promaly/core/compare/v0.4.1...v0.5.0) (2026-08-29)
 
 
