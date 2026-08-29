@@ -1,79 +1,72 @@
-import * as Avatar from '@radix-ui/react-avatar';
-import * as Checkbox from '@radix-ui/react-checkbox';
-import * as Dialog from '@radix-ui/react-dialog';
-import * as Menu from '@radix-ui/react-dropdown-menu';
-import * as Popover from '@radix-ui/react-popover';
-import * as Select from '@radix-ui/react-select';
-import * as Tabs from '@radix-ui/react-tabs';
-import * as Toast from '@radix-ui/react-toast';
-import * as Tooltip from '@radix-ui/react-tooltip';
-import {
-  forwardRef,
-  type ButtonHTMLAttributes,
-  type InputHTMLAttributes,
-  type ReactNode,
-  type TextareaHTMLAttributes,
-} from 'react';
+/**
+ * Promaly UI kit. shadcn/ui primitives on Radix, styled with the design tokens
+ * in `theme.css` (interaction-spec §2–§3). Import `@promaly/ui/theme.css` once
+ * at the app entry, after `@import "tailwindcss"`.
+ */
+export { cn } from './lib/cn.js';
 
-export const Button = forwardRef<
-  HTMLButtonElement,
-  ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'primary' | 'secondary' | 'ghost' }
->(function Button({ className = '', tone = 'primary', type = 'button', ...props }, ref) {
-  return (
-    <button
-      {...props}
-      ref={ref}
-      type={type}
-      className={`pm-button pm-button--${tone} ${className}`}
-    />
-  );
-});
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
-  function Input({ className = '', ...props }, ref) {
-    return <input {...props} ref={ref} className={`pm-input ${className}`} />;
-  },
-);
-export const Textarea = forwardRef<
-  HTMLTextAreaElement,
-  TextareaHTMLAttributes<HTMLTextAreaElement>
->(function Textarea({ className = '', ...props }, ref) {
-  return <textarea {...props} ref={ref} className={`pm-input pm-textarea ${className}`} />;
-});
-export function Badge({ children }: { children: ReactNode }) {
-  return <span className="pm-badge">{children}</span>;
-}
-export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="pm-kbd">{children}</kbd>;
-}
-export function Combobox({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const id = `${label.replaceAll(/\s+/g, '-').toLowerCase()}-options`;
-  return (
-    <label className="pm-combobox">
-      <span>{label}</span>
-      <input
-        aria-label={label}
-        list={id}
-        value={value}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-      <datalist id={id}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </datalist>
-    </label>
-  );
-}
-export { Avatar, Checkbox, Dialog, Menu, Popover, Select, Tabs, Toast, Tooltip };
+export { Avatar, AvatarImage, AvatarFallback } from './components/avatar.js';
+export { Badge, badgeVariants } from './components/badge.js';
+export { Button, buttonVariants } from './components/button.js';
+export { Checkbox } from './components/checkbox.js';
+export {
+  Command,
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandSeparator,
+  CommandShortcut,
+} from './components/command.js';
+export {
+  Dialog,
+  DialogTrigger,
+  DialogClose,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from './components/dialog.js';
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuGroup,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from './components/dropdown-menu.js';
+export { Input } from './components/input.js';
+export { Kbd } from './components/kbd.js';
+export { Label } from './components/label.js';
+export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './components/popover.js';
+export { ScrollArea } from './components/scroll-area.js';
+export {
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+} from './components/select.js';
+export { Separator } from './components/separator.js';
+export { Skeleton } from './components/skeleton.js';
+export { Toaster } from './components/sonner.js';
+export { Tabs, TabsList, TabsTrigger, TabsContent } from './components/tabs.js';
+export { Textarea } from './components/textarea.js';
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './components/tooltip.js';
+
+export { StateIcon, type StateCategory } from './domain/state-icon.js';
+export { PriorityIcon, PRIORITY_LABELS, type Priority } from './domain/priority-icon.js';
+export { LabelDot, LabelChip } from './domain/label-dot.js';
+export { Identifier } from './domain/identifier.js';
+export { EmptyState } from './domain/empty-state.js';
+
+export { toast } from 'sonner';
