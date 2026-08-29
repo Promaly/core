@@ -76,6 +76,21 @@ describe('health endpoints', () => {
     await app.close();
   });
 
+  it('requires an optional bearer token for metrics', async () => {
+    const app = buildMetricsApp({ ...config, metricsToken: 'metrics-secret' });
+
+    const unauthenticated = await app.inject({ method: 'GET', url: '/metrics' });
+    const authenticated = await app.inject({
+      method: 'GET',
+      url: '/metrics',
+      headers: { authorization: 'Bearer metrics-secret' },
+    });
+
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(authenticated.statusCode).toBe(200);
+    await app.close();
+  });
+
   it('sets JSON-API security headers without affecting health checks', async () => {
     const app = buildTestApp();
     const response = await app.inject({ method: 'GET', url: '/healthz' });

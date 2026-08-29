@@ -8,7 +8,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The `migrate` and `createbuckets` one-shot services complete before the API and worker begin. The migrator connects with the PostgreSQL owner URL; the API and worker use the restricted `promaly_app` role, which has DML privileges only. The same image runs `apps/api/dist/main.js` for the API and `apps/worker/dist/main.js` for the worker. Validate the deployment through `https://your-promaly-host/readyz`. Metrics bind only to the Compose network loopback address and are not published to the host.
+The `migrate` and `createbuckets` one-shot services complete before the API and worker begin. The migrator connects with the PostgreSQL owner URL; the API and worker use the restricted `promaly_app` role, which has DML privileges only. The same image runs `apps/api/dist/main.js` for the API and `apps/worker/dist/main.js` for the worker. Validate the deployment through `https://your-promaly-host/readyz`. Metrics bind to the Compose network but are not published to the host; set `METRICS_TOKEN` before allowing a monitoring sidecar to scrape them.
 
 Use immutable versioned image tags through `PROMALY_VERSION`; never use `latest`. The default production image is `ghcr.io/promaly/promaly`.
 

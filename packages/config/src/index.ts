@@ -6,7 +6,10 @@ const configSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   METRICS_HOST: z.string().default('127.0.0.1'),
   METRICS_PORT: z.coerce.number().int().min(1).max(65535).default(9090),
-  METRICS_TOKEN: z.string().min(1).optional(),
+  METRICS_TOKEN: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
   DATABASE_URL: z.string().url().optional(),
   MIGRATION_DATABASE_URL: z.string().url().optional(),
   S3_ENDPOINT: z.string().url().optional(),

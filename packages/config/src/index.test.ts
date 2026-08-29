@@ -40,5 +40,6 @@ describe('loadConfig', () => {
       otelTracesEnabled: true,
     });
     expect(() => loadConfig({ OTEL_TRACES_ENABLED: 'sometimes' })).toThrow('Invalid configuration');
+    expect(loadConfig({ METRICS_TOKEN: '' }).metricsToken).toBeUndefined();
   });
 });

@@ -55,9 +55,13 @@ function metricsBody(metrics: MetricsState) {
 
 export function buildMetricsApp(config: AppConfig, metrics = createMetricsState()) {
   const app = Fastify({ logger: { level: config.logLevel } });
-  app.get('/metrics', async (_request, reply) =>
-    reply.type('text/plain; version=0.0.4; charset=utf-8').send(metricsBody(metrics)),
-  );
+  app.get('/metrics', async (request, reply) => {
+    if (config.metricsToken && request.headers.authorization !== `Bearer ${config.metricsToken}`) {
+      return reply.code(401).send({ error: 'Metrics authentication is required.' });
+    }
+
+    return reply.type('text/plain; version=0.0.4; charset=utf-8').send(metricsBody(metrics));
+  });
   return app;
 }
 
