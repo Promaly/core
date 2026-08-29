@@ -247,7 +247,10 @@ export async function buildApp(
               imgSrc: ["'self'", 'data:'],
               objectSrc: ["'none'"],
               scriptSrc: ["'self'"],
-              styleSrc: ["'self'"],
+              // Radix UI and dnd-kit set element `style` attributes at runtime
+              // (positioning, transforms); those are inert markup, not script,
+              // so allowing inline styles is a safe, standard trade-off.
+              styleSrc: ["'self'", "'unsafe-inline'"],
             },
           }
         : { directives: { defaultSrc: ["'none'"] } },
