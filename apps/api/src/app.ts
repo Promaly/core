@@ -130,7 +130,7 @@ function requestMetadata(request: { ip: string; headers: { 'user-agent'?: string
   return metadata;
 }
 
-export function buildApp(
+export async function buildApp(
   config: AppConfig,
   dependencies = createAppDependencies(config),
   metrics = createMetricsState(),
@@ -178,11 +178,13 @@ export function buildApp(
     throw error;
   };
 
-  void app.register(cookie);
-  void app.register(helmet, {
+  // Registrations are awaited: @fastify/rate-limit only wires its hooks once it
+  // has finished loading, so `void register(...)` silently disables it.
+  await app.register(cookie);
+  await app.register(helmet, {
     contentSecurityPolicy: { directives: { defaultSrc: ["'none'"] } },
   });
-  void app.register(csrfProtection, {
+  await app.register(csrfProtection, {
     cookieOpts: {
       httpOnly: true,
       sameSite: 'lax',
@@ -191,8 +193,9 @@ export function buildApp(
     },
     getToken: (request) => request.headers['x-csrf-token'] as string | undefined,
   });
-  void app.register(rateLimit, { global: false });
-  void app.register(underPressure, {
+  // Global baseline; auth routes tighten it with per-route `config.rateLimit`.
+  await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute' });
+  await app.register(underPressure, {
     maxEventLoopDelay: 1_000,
     maxHeapUsedBytes: 512 * 1024 * 1024,
     maxRssBytes: 768 * 1024 * 1024,
@@ -213,7 +216,7 @@ export function buildApp(
     await dependencies.readinessChecks.close();
   });
 
-  app.get('/healthz', async () =>
+  app.get('/healthz', { config: { rateLimit: false } }, async () =>
     healthResponseSchema.parse({
       status: 'ok',
       service: 'api',
@@ -221,7 +224,7 @@ export function buildApp(
     }),
   );
 
-  app.get('/readyz', async (_request, reply) => {
+  app.get('/readyz', { config: { rateLimit: false } }, async (_request, reply) => {
     try {
       if (app.isUnderPressure()) {
         return reply.code(503).send({ status: 'not_ready', reason: 'Service is under pressure' });
@@ -318,22 +321,26 @@ export function buildApp(
     },
   );
 
-  app.post('/v1/auth/password-reset/:token', { onRequest: requireCsrf }, async (request, reply) => {
-    const input = passwordResetConfirmSchema.safeParse(request.body);
-    if (!input.success) return reply.code(400).send({ error: 'Invalid password reset input.' });
-    const token = (request.params as { token?: string }).token;
-    if (!token || !dependencies.identity)
-      return reply.code(400).send({ error: 'Invalid password reset link.' });
-    try {
-      await dependencies.identity.resetPassword(token, input.data.password);
-      reply.clearCookie('promaly_session', { path: '/' });
-      return reply.code(204).send();
-    } catch (error) {
-      if (error instanceof PasswordResetError)
-        return reply.code(400).send({ error: error.message });
-      throw error;
-    }
-  });
+  app.post(
+    '/v1/auth/password-reset/:token',
+    { config: { rateLimit: { max: 10, timeWindow: '1 hour' } }, onRequest: requireCsrf },
+    async (request, reply) => {
+      const input = passwordResetConfirmSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid password reset input.' });
+      const token = (request.params as { token?: string }).token;
+      if (!token || !dependencies.identity)
+        return reply.code(400).send({ error: 'Invalid password reset link.' });
+      try {
+        await dependencies.identity.resetPassword(token, input.data.password);
+        reply.clearCookie('promaly_session', { path: '/' });
+        return reply.code(204).send();
+      } catch (error) {
+        if (error instanceof PasswordResetError)
+          return reply.code(400).send({ error: error.message });
+        throw error;
+      }
+    },
+  );
 
   app.get('/v1/auth/me', async (request, reply) => {
     const token = request.cookies.promaly_session;
@@ -514,6 +521,10 @@ export function buildApp(
         return reply.code(400).send({ error: 'Invalid member input.' });
       if (!dependencies.tenancy || !request.principal)
         return reply.code(503).send({ error: 'Tenancy is not configured.' });
+      // Granting `owner` is ownership transfer, not member management.
+      if (input.data.role === 'owner' && !request.principal.can('workspace.transfer')) {
+        return reply.code(403).send({ error: 'Only an owner can grant the owner role.' });
+      }
       try {
         await dependencies.tenancy.updateMemberRole(
           request.principal.workspaceId,

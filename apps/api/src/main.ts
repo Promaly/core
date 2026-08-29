@@ -5,7 +5,7 @@ const config = loadConfig(process.env);
 const stopOpenTelemetry = startOpenTelemetry(config);
 const { buildApp, buildMetricsApp, createMetricsState } = await import('./app.js');
 const metrics = createMetricsState();
-const app = buildApp(config, undefined, metrics);
+const app = await buildApp(config, undefined, metrics);
 const metricsApp = buildMetricsApp(config, metrics);
 
 try {

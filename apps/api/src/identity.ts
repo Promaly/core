@@ -354,34 +354,42 @@ export function createIdentityService(database: DatabaseClient): IdentityService
     async resetPassword(token, password) {
       const now = new Date();
       const tokenHash = hashSessionToken(token);
+
+      // Cheap validity check first: an invalid or spent token must never reach
+      // the (expensive) Argon2 hash on this unauthenticated endpoint.
+      const pending = (
+        await db
+          .select({ id: passwordResetTokens.id })
+          .from(passwordResetTokens)
+          .where(
+            and(
+              eq(passwordResetTokens.tokenHash, tokenHash),
+              isNull(passwordResetTokens.usedAt),
+              gt(passwordResetTokens.expiresAt, now),
+            ),
+          )
+          .limit(1)
+      )[0];
+      if (!pending) {
+        throw new PasswordResetError('This password reset link is invalid or expired.');
+      }
+
       const passwordHash = await argon2.hash(password, {
         type: argon2.argon2id,
         memoryCost: 19_456,
         timeCost: 2,
         parallelism: 1,
       });
-      await db.transaction(async (transaction) => {
-        const reset = (
-          await transaction
-            .select({ id: passwordResetTokens.id, accountId: passwordResetTokens.accountId })
-            .from(passwordResetTokens)
-            .where(
-              and(
-                eq(passwordResetTokens.tokenHash, tokenHash),
-                isNull(passwordResetTokens.usedAt),
-                gt(passwordResetTokens.expiresAt, now),
-              ),
-            )
-            .limit(1)
-        )[0];
-        if (!reset) throw new PasswordResetError('This password reset link is invalid or expired.');
 
+      await db.transaction(async (transaction) => {
+        // Consume atomically; a concurrent request loses the race here.
         const consumed = await transaction
           .update(passwordResetTokens)
           .set({ usedAt: now })
-          .where(and(eq(passwordResetTokens.id, reset.id), isNull(passwordResetTokens.usedAt)))
-          .returning({ id: passwordResetTokens.id });
-        if (consumed.length !== 1) {
+          .where(and(eq(passwordResetTokens.id, pending.id), isNull(passwordResetTokens.usedAt)))
+          .returning({ accountId: passwordResetTokens.accountId });
+        const reset = consumed[0];
+        if (!reset) {
           throw new PasswordResetError('This password reset link is invalid or expired.');
         }
 

@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { CoreRole } from '@promaly/domain';
 import type { IdentityService } from './identity.js';
+import type { TenancyService } from './tenancy.js';
 import { requireCapability } from './principal.js';
 import { buildApp, buildMetricsApp, createMetricsState } from './app.js';
 
@@ -40,9 +42,10 @@ const session = {
   ],
 };
 
-function buildTestApp(identity?: IdentityService) {
+function buildTestApp(identity?: IdentityService, tenancy?: TenancyService) {
   return buildApp(config, {
     identity,
+    tenancy,
     readinessChecks: {
       database: async () => undefined,
       objectStorage: async () => undefined,
@@ -51,9 +54,68 @@ function buildTestApp(identity?: IdentityService) {
   });
 }
 
+const workspaceId = session.workspaces[0]!.id;
+
+function sessionAs(role: CoreRole) {
+  return {
+    account: session.account,
+    workspaces: [{ ...session.workspaces[0]!, role }],
+  };
+}
+
+function identityAs(role: CoreRole): IdentityService {
+  return {
+    register: async () => ({
+      ...session,
+      token: { value: 't', expiresAt: new Date('2026-12-01') },
+    }),
+    login: async () => ({ ...session, token: { value: 't', expiresAt: new Date('2026-12-01') } }),
+    getSession: async (token) => (token ? sessionAs(role) : null),
+    logout: async () => undefined,
+    logoutAll: async () => undefined,
+    requestPasswordReset: async () => undefined,
+    resetPassword: async () => undefined,
+  };
+}
+
+function tenancyMock(overrides: Partial<TenancyService> = {}): TenancyService {
+  return {
+    createWorkspace: vi.fn(async () => ({ id: workspaceId, name: 'W', slug: 'w', role: 'owner' })),
+    updateWorkspace: vi.fn(async () => ({ id: workspaceId, name: 'W', slug: 'w' })),
+    deleteWorkspace: vi.fn(async () => undefined),
+    listMembers: vi.fn(async () => []),
+    updateMemberRole: vi.fn(async () => undefined),
+    removeMember: vi.fn(async () => undefined),
+    createInvitation: vi.fn(async () => ({
+      id: 'inv-1',
+      email: 'x@example.com',
+      role: 'member' as const,
+      expiresAt: new Date('2026-12-01'),
+    })),
+    listInvitations: vi.fn(async () => []),
+    revokeInvitation: vi.fn(async () => undefined),
+    acceptInvitation: vi.fn(async () => ({
+      workspaceId,
+      accountId: session.account.id,
+      role: 'member' as const,
+    })),
+    ...overrides,
+  } as TenancyService;
+}
+
+async function csrf(app: Awaited<ReturnType<typeof buildTestApp>>) {
+  const response = await app.inject({ method: 'GET', url: '/v1/auth/csrf' });
+  return {
+    cookie: response.headers['set-cookie'] as string,
+    token: response.json<{ csrfToken: string }>().csrfToken,
+  };
+}
+
+const wsHeaders = { cookie: 'promaly_session=t', 'x-workspace-id': workspaceId };
+
 describe('health endpoints', () => {
   it('reports that the API is healthy', async () => {
-    const app = buildTestApp();
+    const app = await buildTestApp();
     const response = await app.inject({ method: 'GET', url: '/healthz' });
 
     expect(response.statusCode).toBe(200);
@@ -62,7 +124,7 @@ describe('health endpoints', () => {
   });
 
   it('checks its dependencies before reporting ready', async () => {
-    const app = buildTestApp();
+    const app = await buildTestApp();
     const response = await app.inject({ method: 'GET', url: '/readyz' });
 
     expect(response.statusCode).toBe(200);
@@ -96,7 +158,7 @@ describe('health endpoints', () => {
   });
 
   it('sets JSON-API security headers without affecting health checks', async () => {
-    const app = buildTestApp();
+    const app = await buildTestApp();
     const response = await app.inject({ method: 'GET', url: '/healthz' });
 
     expect(response.headers['content-security-policy']).toContain("default-src 'none'");
@@ -123,7 +185,7 @@ describe('identity endpoints', () => {
   };
 
   it('registers an account and sets an HTTP-only session cookie', async () => {
-    const app = buildTestApp(identity);
+    const app = await buildTestApp(identity);
     const csrf = await app.inject({ method: 'GET', url: '/v1/auth/csrf' });
     const response = await app.inject({
       method: 'POST',
@@ -147,7 +209,7 @@ describe('identity endpoints', () => {
   });
 
   it('rejects a state-changing request without a CSRF token', async () => {
-    const app = buildTestApp(identity);
+    const app = await buildTestApp(identity);
     const response = await app.inject({
       method: 'POST',
       url: '/v1/auth/login',
@@ -159,7 +221,7 @@ describe('identity endpoints', () => {
   });
 
   it('requires an authenticated session for the current account', async () => {
-    const app = buildTestApp(identity);
+    const app = await buildTestApp(identity);
     const response = await app.inject({ method: 'GET', url: '/v1/auth/me' });
 
     expect(response.statusCode).toBe(401);
@@ -167,7 +229,7 @@ describe('identity endpoints', () => {
   });
 
   it('wires the workspace authorization spine onto the main app', async () => {
-    const app = buildTestApp(identity);
+    const app = await buildTestApp(identity);
     app.get(
       '/_test/scoped',
       { preHandler: [app.requireWorkspace, requireCapability('project.manage')] },
@@ -180,10 +242,188 @@ describe('identity endpoints', () => {
     const allowed = await app.inject({
       method: 'GET',
       url: '/_test/scoped',
-      headers: { cookie: 'promaly_session=t', 'x-workspace-id': session.workspaces[0]!.id },
+      headers: wsHeaders,
     });
     expect(allowed.statusCode).toBe(200);
-    expect(allowed.json()).toMatchObject({ workspaceId: session.workspaces[0]!.id, role: 'owner' });
+    expect(allowed.json()).toMatchObject({ workspaceId, role: 'owner' });
+    await app.close();
+  });
+
+  it('revokes every session on DELETE /v1/auth/sessions', async () => {
+    const app = await buildTestApp(identityAs('member'));
+    const { cookie, token } = await csrf(app);
+
+    const anon = await app.inject({
+      method: 'DELETE',
+      url: '/v1/auth/sessions',
+      headers: { cookie, 'x-csrf-token': token },
+    });
+    expect(anon.statusCode).toBe(401);
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/v1/auth/sessions',
+      headers: { cookie: `${cookie}; promaly_session=t`, 'x-csrf-token': token },
+    });
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['set-cookie']).toContain('promaly_session=;');
+    await app.close();
+  });
+
+  it('always answers 202 to a password reset request', async () => {
+    const app = await buildTestApp(identityAs('member'));
+    const { cookie, token } = await csrf(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset',
+      headers: { cookie, 'x-csrf-token': token },
+      payload: { email: 'nobody@example.com' },
+    });
+    expect(response.statusCode).toBe(202);
+    await app.close();
+  });
+
+  it('rate-limits the password reset confirmation endpoint', async () => {
+    const app = await buildTestApp(identityAs('member'));
+    const { cookie, token } = await csrf(app);
+    const send = () =>
+      app.inject({
+        method: 'POST',
+        url: '/v1/auth/password-reset/some-token',
+        remoteAddress: '203.0.113.7',
+        headers: { cookie, 'x-csrf-token': token },
+        payload: { password: 'a-brand-new-password' },
+      });
+
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i += 1) codes.push((await send()).statusCode);
+    expect(codes.at(-1)).toBe(429);
+    await app.close();
+  });
+});
+
+describe('tenancy endpoints', () => {
+  it('creates a workspace for an authenticated account', async () => {
+    const tenancy = tenancyMock();
+    const app = await buildTestApp(identityAs('member'), tenancy);
+    const { cookie, token } = await csrf(app);
+
+    const anon = await app.inject({
+      method: 'POST',
+      url: '/v1/workspaces',
+      headers: { cookie, 'x-csrf-token': token },
+      payload: { name: 'New workspace' },
+    });
+    expect(anon.statusCode).toBe(401);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/workspaces',
+      headers: { cookie: `${cookie}; promaly_session=t`, 'x-csrf-token': token },
+      payload: { name: 'New workspace' },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(tenancy.createWorkspace).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it('gates invitations on the member.manage capability', async () => {
+    for (const [role, status] of [
+      ['member', 403],
+      ['admin', 201],
+    ] as const) {
+      const tenancy = tenancyMock();
+      const app = await buildTestApp(identityAs(role), tenancy);
+      const { cookie, token } = await csrf(app);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/invitations',
+        headers: { ...wsHeaders, cookie: `${cookie}; promaly_session=t`, 'x-csrf-token': token },
+        payload: { email: 'invitee@example.com', role: 'member' },
+      });
+      expect(response.statusCode).toBe(status);
+      await app.close();
+    }
+  });
+
+  it('requires the X-Workspace-Id header on workspace-scoped routes', async () => {
+    const app = await buildTestApp(identityAs('admin'), tenancyMock());
+    const { cookie, token } = await csrf(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/invitations',
+      headers: { cookie: `${cookie}; promaly_session=t`, 'x-csrf-token': token },
+      payload: { email: 'invitee@example.com', role: 'member' },
+    });
+    expect(response.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('lets only an owner grant the owner role', async () => {
+    for (const [role, status] of [
+      ['admin', 403],
+      ['owner', 204],
+    ] as const) {
+      const tenancy = tenancyMock();
+      const app = await buildTestApp(identityAs(role), tenancy);
+      const { cookie, token } = await csrf(app);
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/v1/members/${session.account.id}`,
+        headers: { ...wsHeaders, cookie: `${cookie}; promaly_session=t`, 'x-csrf-token': token },
+        payload: { role: 'owner' },
+      });
+      expect(response.statusCode).toBe(status);
+      if (status === 403) expect(tenancy.updateMemberRole).not.toHaveBeenCalled();
+      await app.close();
+    }
+  });
+
+  it('still allows an admin to set a non-owner role', async () => {
+    const tenancy = tenancyMock();
+    const app = await buildTestApp(identityAs('admin'), tenancy);
+    const { cookie, token } = await csrf(app);
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/v1/members/${session.account.id}`,
+      headers: { ...wsHeaders, cookie: `${cookie}; promaly_session=t`, 'x-csrf-token': token },
+      payload: { role: 'member' },
+    });
+    expect(response.statusCode).toBe(204);
+    expect(tenancy.updateMemberRole).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it('404s when the path workspace differs from the caller workspace', async () => {
+    const app = await buildTestApp(identityAs('owner'), tenancyMock());
+    const { cookie, token } = await csrf(app);
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/v1/workspaces/00000000-0000-0000-0000-000000000000',
+      headers: { ...wsHeaders, cookie: `${cookie}; promaly_session=t`, 'x-csrf-token': token },
+      payload: { name: 'Renamed' },
+    });
+    expect(response.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('denies workspace settings to a plain member', async () => {
+    const app = await buildTestApp(identityAs('member'), tenancyMock());
+    const { cookie, token } = await csrf(app);
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/v1/workspaces/${workspaceId}`,
+      headers: { ...wsHeaders, cookie: `${cookie}; promaly_session=t`, 'x-csrf-token': token },
+      payload: { name: 'Renamed' },
+    });
+    expect(response.statusCode).toBe(403);
+    await app.close();
+  });
+
+  it('lets any member read the member list', async () => {
+    const app = await buildTestApp(identityAs('guest'), tenancyMock());
+    const response = await app.inject({ method: 'GET', url: '/v1/members', headers: wsHeaders });
+    expect(response.statusCode).toBe(200);
     await app.close();
   });
 });
