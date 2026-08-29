@@ -1,3 +1,10 @@
+# [0.7.0](https://github.com/Promaly/core/compare/v0.6.0...v0.7.0) (2026-08-29)
+
+
+### Features
+
+* **web:** wire the issue surface to the S3/S4 API [S6] ([266319f](https://github.com/Promaly/core/commit/266319fa1e4c1067c5d5800544a4631cb7bd08e1))
+
 # [0.6.0](https://github.com/Promaly/core/compare/v0.5.0...v0.6.0) (2026-08-29)
 
 
