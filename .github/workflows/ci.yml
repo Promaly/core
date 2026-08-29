@@ -23,12 +23,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check
+      - run: pnpm db:check
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
       - run: pnpm test:e2e
       - run: pnpm test:integration
 
+  # Image vulnerability scanning runs at release time in publish-image.yml, which
+  # gates the pushed artifact. It is intentionally not mirrored here: the Trivy
+  # action's binary installer is network-flaky and would block unrelated PRs.
   container-build:
     runs-on: ubuntu-24.04
     steps:

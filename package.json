@@ -5,13 +5,14 @@
   "description": "Promaly Core — self-hosted work management for teams.",
   "packageManager": "pnpm@11.5.2",
   "engines": {
-    "node": ">=22.0.0",
-    "pnpm": ">=11.0.0"
+    "node": ">=24.0.0",
+    "pnpm": ">=11.5.2"
   },
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "db:generate": "pnpm --filter @promaly/db db:generate",
+    "db:check": "pnpm --filter @promaly/db db:check",
     "db:migrate": "pnpm --filter @promaly/db db:migrate",
     "lint": "turbo run lint",
     "test": "turbo run test",
