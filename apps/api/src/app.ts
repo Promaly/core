@@ -19,6 +19,7 @@ import {
   createIdentityService,
   type IdentityService,
 } from './identity.js';
+import './principal.js';
 
 type ReadinessChecks = {
   database: () => Promise<void>;
@@ -57,6 +58,7 @@ export function buildMetricsApp(config: AppConfig, metrics = createMetricsState(
   const app = Fastify({
     logger: { level: config.logLevel, redact: ['req.headers.authorization'] },
   });
+  app.decorateRequest('principal', undefined);
   app.get('/metrics', async (request, reply) => {
     if (config.metricsToken && request.headers.authorization !== `Bearer ${config.metricsToken}`) {
       return reply.code(401).send({ error: 'Metrics authentication is required.' });
