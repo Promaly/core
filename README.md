@@ -25,11 +25,17 @@ docker build -t promaly:dev .
 docker run --rm -p 3000:3000 promaly:dev
 ```
 
-For a self-hosted deployment, copy `.env.example` to `.env`, set strong secrets and a versioned `PROMALY_VERSION`, then start Compose. Migrations and private-bucket creation run automatically before the API and worker start:
+For a self-hosted deployment, no configuration is required:
 
 ```sh
 docker compose up -d
 ```
+
+The image builds on first run, internal database and object-storage credentials
+are generated automatically, migrations and private-bucket creation happen
+before the API starts, and the first admin account is created in the web UI.
+`.env` is optional — see `.env.example` for the operator overrides (public port,
+SMTP, running a published image).
 
 See [Core deployment](docs/operations/core-deployment.md), [installation](docs/operations/install.md), [status](docs/status.md), and [backup and restore](docs/operations/backup-and-restore.md) before deploying real data.
 

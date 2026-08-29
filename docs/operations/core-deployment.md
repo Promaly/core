@@ -3,15 +3,26 @@
 Promaly Core deploys one Promaly image as both the API and worker, plus PostgreSQL and MinIO. PostgreSQL and MinIO have no host ports; expose only the API through your TLS proxy.
 
 ```sh
-cp .env.example .env
-# Replace every example secret and set a released PROMALY_VERSION.
 docker compose up -d
 ```
 
-The `migrate` and `createbuckets` one-shot services complete before the API and worker begin. The migrator connects with the PostgreSQL owner URL; the API and worker use the restricted `promaly_app` role, which has DML privileges only. The same image runs `apps/api/dist/main.js` for the API and `apps/worker/dist/main.js` for the worker. Validate the deployment through `https://your-promaly-host/readyz`. Metrics bind to the Compose network but are not published to the host; set `METRICS_TOKEN` before allowing a monitoring sidecar to scrape them.
+That is the whole install. No `.env`, no secrets to set.
 
-Use immutable versioned image tags through `PROMALY_VERSION`; never use `latest`. The default production image is `ghcr.io/promaly/promaly`.
+**Credentials.** The one-shot `bootstrap` service generates the PostgreSQL and MinIO passwords on first run into the `promaly-secrets` volume and never overwrites them. They are not in `compose.yaml`, in `docker inspect`, or in git. Every service reads them from files at start — `POSTGRES_PASSWORD_FILE` / `MINIO_ROOT_PASSWORD_FILE` for the stores, a small shell wrapper that builds `DATABASE_URL` for the API and worker. Back up the `promaly-secrets` volume alongside the database.
+
+**Startup order.** `bootstrap` → `postgres` + `minio` → `migrate` (owner role, applies migrations) and `createbuckets` → `app` + `worker` (restricted `promaly_app` role, DML only). Compose enforces this with health and completion conditions.
+
+**First admin.** Open the app and register — the first account owns the first workspace.
+
+**Overrides.** `.env` is optional and carries only operator choices: `PROMALY_PORT`, `SMTP_URL` / `SMTP_FROM`, `LOG_LEVEL`, `METRICS_TOKEN`, and `PROMALY_IMAGE` / `PROMALY_VERSION` to run a published release instead of building from this checkout. See `.env.example`. Metrics bind to the Compose network but are never published to the host; set `METRICS_TOKEN` before a sidecar scrapes them. Validate through `https://your-promaly-host/readyz`.
 
 ## Upgrade and rollback
 
-Before upgrading, pull the intended release and run the migration job explicitly to review its output: `docker compose pull` followed by `docker compose run --rm migrate`. Then run `docker compose up -d`. Migrations are forward-only: a rollback means deploying the prior application image only after verifying that it is compatible with the migrated schema; restore a tested backup for schema/data rollback.
+From a source checkout: `git pull` then `docker compose up -d --build`. Running a
+published image: bump `PROMALY_VERSION` in `.env`, then `docker compose pull` and
+`docker compose up -d`. To review the migration before it runs against live data,
+`docker compose run --rm migrate` first.
+
+Migrations are forward-only. A rollback means deploying the prior image only after
+confirming it is compatible with the migrated schema; otherwise restore a tested
+backup (database dump **and** the `promaly-secrets` volume).
