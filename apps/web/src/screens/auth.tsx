@@ -66,7 +66,7 @@ function Field({
 
 function useSubmit(fallback: string) {
   const [error, setError] = useState<string>();
-  const run = (action: Promise<unknown>, onDone: () => void) => {
+  const run = <T,>(action: Promise<T>, onDone: (value: T) => void) => {
     setError(undefined);
     void action.then(onDone).catch((reason: unknown) => {
       setError(reason instanceof Error ? reason.message : fallback);
@@ -86,10 +86,13 @@ export function Login() {
       onSubmit={(event) => {
         event.preventDefault();
         const values = new FormData(event.currentTarget);
-        run(authApi.login(String(values.get('email')), String(values.get('password'))), () => {
-          void navigate({ to: '/' });
-          void session.invalidate();
-        });
+        run(
+          authApi.login(String(values.get('email')), String(values.get('password'))),
+          (result) => {
+            session.set(result);
+            void navigate({ to: '/' });
+          },
+        );
       }}
       footer={
         <>
@@ -135,9 +138,9 @@ export function Register() {
             String(values.get('password')),
             String(values.get('workspaceName')),
           ),
-          () => {
+          (result) => {
+            session.set(result);
             void navigate({ to: '/' });
-            void session.invalidate();
           },
         );
       }}
@@ -241,9 +244,9 @@ export function Invite() {
       onSubmit={(event) => {
         event.preventDefault();
         const password = String(new FormData(event.currentTarget).get('password') ?? '');
-        run(authApi.acceptInvite(token, password), () => {
+        run(authApi.acceptInvite(token, password), (result) => {
+          session.set(result);
           void navigate({ to: '/' });
-          void session.invalidate();
         });
       }}
     >
@@ -274,8 +277,8 @@ export function Onboarding() {
         event.preventDefault();
         const name = String(new FormData(event.currentTarget).get('name'));
         run(authApi.createWorkspace(name), () => {
-          void navigate({ to: '/' });
           void session.invalidate();
+          void navigate({ to: '/' });
         });
       }}
     >
