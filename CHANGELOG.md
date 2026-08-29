@@ -1,3 +1,10 @@
+## [0.7.2](https://github.com/Promaly/core/compare/v0.7.1...v0.7.2) (2026-08-29)
+
+
+### Bug Fixes
+
+* **api:** allow inline styles in the production CSP ([3f1f14a](https://github.com/Promaly/core/commit/3f1f14a0da8a5033e72b4d4b126b8933c7506fe0))
+
 ## [0.7.1](https://github.com/Promaly/core/compare/v0.7.0...v0.7.1) (2026-08-29)
 
 
