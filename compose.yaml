@@ -46,10 +46,20 @@ services:
   postgres:
     image: postgres@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675 # postgres:17
     shm_size: 128mb
+    # Read the generated password from the secrets volume and set POSTGRES_PASSWORD
+    # directly. `unset POSTGRES_PASSWORD_FILE` so the two are never both present —
+    # some hosting platforms auto-inject POSTGRES_PASSWORD for `postgres` images,
+    # and the entrypoint refuses to start when it sees both.
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export POSTGRES_PASSWORD="$$(cat /run/promaly/db_owner_password)"
+        unset POSTGRES_PASSWORD_FILE
+        exec docker-entrypoint.sh postgres
     environment:
       POSTGRES_DB: promaly
       POSTGRES_USER: promaly
-      POSTGRES_PASSWORD_FILE: /run/promaly/db_owner_password
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - promaly-secrets:/run/promaly:ro
@@ -71,10 +81,17 @@ services:
 
   minio:
     image: minio/minio@sha256:3f97c5651cb6662b880c787a232b6b34fec8d8922e08d6617b25d241a21164bb # RELEASE.2025-04-22T22-12-26Z
-    command: server /data --console-address ':9001'
+    # Same guard as postgres: set MINIO_ROOT_PASSWORD from the secrets volume and
+    # drop the _FILE variant so an injected MINIO_ROOT_PASSWORD can't collide.
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export MINIO_ROOT_PASSWORD="$$(cat /run/promaly/minio_root_password)"
+        unset MINIO_ROOT_PASSWORD_FILE
+        exec /usr/bin/docker-entrypoint.sh minio server /data --console-address ':9001'
     environment:
       MINIO_ROOT_USER: promaly
-      MINIO_ROOT_PASSWORD_FILE: /run/promaly/minio_root_password
     volumes:
       - minio-data:/data
       - promaly-secrets:/run/promaly:ro
