@@ -1,7 +1,7 @@
 # ARM64 installation
 
 Install Docker Engine and the Docker Compose plugin on the ARM64 host, clone this
-repository (or copy `compose.yaml` and `infra/`) into an empty directory, then:
+repository (or copy `compose.yaml`) into an empty directory, then:
 
 ```sh
 docker compose up -d

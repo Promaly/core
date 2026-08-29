@@ -7,6 +7,7 @@ export * from './schema.js';
 export * from './outbox.js';
 export * from './scoped-repository.js';
 export * from './errors.js';
+export * from './app-role.js';
 
 /** Absolute path to the SQL migrations directory that ships with this package. */
 export const migrationsDir = fileURLToPath(new URL('../drizzle', import.meta.url));
