@@ -30,6 +30,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - uses: aquasecurity/trivy-action@v0.33.1
+        env:
+          # Authenticate Trivy's binary/DB downloads to avoid anonymous rate limits.
+          GITHUB_TOKEN: ${{ github.token }}
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
         with:
           image-ref: promaly:release-candidate
           format: table
