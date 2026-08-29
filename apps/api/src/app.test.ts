@@ -190,6 +190,15 @@ describe('health endpoints', () => {
     expect(response.statusCode).toBe(200);
     await app.close();
   });
+
+  it('publishes the versioned OpenAPI document', async () => {
+    const app = await buildTestApp();
+    const response = await app.inject({ method: 'GET', url: '/v1/openapi.json' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ openapi: '3.1.0', info: { title: 'Promaly API' } });
+    await app.close();
+  });
 });
 
 describe('identity endpoints', () => {

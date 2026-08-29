@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+@import '@promaly/ui/theme.css';
+
+/* packages/ui lives outside this app's root — tell Tailwind to scan it. */
+@source '../../../packages/ui/src/**/*.{ts,tsx}';
+
+@layer base {
+  a {
+    color: inherit;
+  }
+}

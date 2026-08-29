@@ -1,0 +1,137 @@
+/**
+ * Promaly design tokens. Semantic names follow the shadcn/ui contract so its
+ * primitives work unmodified; the values follow
+ * docs/upstream-notes/interaction-spec.md §2.
+ *
+ * Three theme states: bare :root is light; an un-stamped document follows
+ * prefers-color-scheme; an explicit [data-theme] wins in both directions.
+ * This file is a Tailwind v4 partial — import it after `@import "tailwindcss"`.
+ */
+
+:root {
+  --background: #ffffff;
+  --foreground: #1a1f27;
+  --card: #ffffff;
+  --card-foreground: #1a1f27;
+  --popover: #ffffff;
+  --popover-foreground: #1a1f27;
+  --primary: #0f7d8c;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f6f8;
+  --secondary-foreground: #1a1f27;
+  --muted: #f5f6f8;
+  --muted-foreground: #5b6472;
+  --accent: #eef0f3;
+  --accent-foreground: #1a1f27;
+  --destructive: #b23b3b;
+  --destructive-foreground: #ffffff;
+  --border: #e4e7eb;
+  --input: #cfd4da;
+  --ring: #0f7d8c;
+
+  /* Promaly extras beyond the shadcn set */
+  --faint: #8a929e;
+  --success: #1a7f4b;
+  --warning: #a5680f;
+
+  --radius: 0.375rem;
+
+  --shadow-popover: 0 1px 2px rgb(20 28 40 / 6%), 0 8px 24px rgb(20 28 40 / 10%);
+  --shadow-dialog: 0 8px 40px rgb(20 28 40 / 18%);
+  --dur-fast: 120ms;
+  --dur-panel: 180ms;
+  --ease-brand: cubic-bezier(0.2, 0, 0, 1);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --background: #0f1319;
+    --foreground: #d6dae1;
+    --card: #1b212b;
+    --card-foreground: #d6dae1;
+    --popover: #1b212b;
+    --popover-foreground: #d6dae1;
+    --primary: #3bb6c4;
+    --primary-foreground: #06262b;
+    --secondary: #161b22;
+    --secondary-foreground: #d6dae1;
+    --muted: #161b22;
+    --muted-foreground: #98a1ad;
+    --accent: #232a35;
+    --accent-foreground: #d6dae1;
+    --destructive: #e07c7c;
+    --destructive-foreground: #1a0e0e;
+    --border: #2b323c;
+    --input: #3a424d;
+    --ring: #3bb6c4;
+    --faint: #6b7480;
+    --success: #3fbf7f;
+    --warning: #d79a4e;
+    --shadow-popover: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 28px rgb(0 0 0 / 34%);
+    --shadow-dialog: 0 10px 44px rgb(0 0 0 / 50%);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --background: #0f1319;
+  --foreground: #d6dae1;
+  --card: #1b212b;
+  --card-foreground: #d6dae1;
+  --popover: #1b212b;
+  --popover-foreground: #d6dae1;
+  --primary: #3bb6c4;
+  --primary-foreground: #06262b;
+  --secondary: #161b22;
+  --secondary-foreground: #d6dae1;
+  --muted: #161b22;
+  --muted-foreground: #98a1ad;
+  --accent: #232a35;
+  --accent-foreground: #d6dae1;
+  --destructive: #e07c7c;
+  --destructive-foreground: #1a0e0e;
+  --border: #2b323c;
+  --input: #3a424d;
+  --ring: #3bb6c4;
+  --faint: #6b7480;
+  --success: #3fbf7f;
+  --warning: #d79a4e;
+  --shadow-popover: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 28px rgb(0 0 0 / 34%);
+  --shadow-dialog: 0 10px 44px rgb(0 0 0 / 50%);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-faint: var(--faint);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}

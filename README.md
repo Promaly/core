@@ -39,6 +39,8 @@ SMTP, running a published image).
 
 See [Core deployment](docs/operations/core-deployment.md), [installation](docs/operations/install.md), [status](docs/status.md), and [backup and restore](docs/operations/backup-and-restore.md) before deploying real data.
 
+The web client is built against [the interaction spec](docs/upstream-notes/interaction-spec.md).
+
 ## Repository layout
 
 - `apps/api` — Fastify HTTP API and future WebSocket gateway

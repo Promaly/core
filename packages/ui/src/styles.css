@@ -1,0 +1,74 @@
+/**
+ * Base layer for the Promaly web client. Import after Tailwind + theme.css.
+ * Element resets, keyboard focus, and the animation keyframes shadcn primitives
+ * expect. All component styling is Tailwind utilities inside packages/ui.
+ */
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizelegibility;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 26%, transparent);
+}
+
+@keyframes pm-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pm-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes pm-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes pm-zoom-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes pm-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

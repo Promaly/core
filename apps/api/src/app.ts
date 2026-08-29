@@ -3,7 +3,11 @@ import cookie from '@fastify/cookie';
 import csrfProtection from '@fastify/csrf-protection';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
+import swagger from '@fastify/swagger';
 import underPressure from '@fastify/under-pressure';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import {
   authenticatedSessionSchema,
@@ -233,7 +237,20 @@ export async function buildApp(
   // has finished loading, so `void register(...)` silently disables it.
   await app.register(cookie);
   await app.register(helmet, {
-    contentSecurityPolicy: { directives: { defaultSrc: ["'none'"] } },
+    contentSecurityPolicy:
+      config.nodeEnv === 'production'
+        ? {
+            directives: {
+              defaultSrc: ["'self'"],
+              baseUri: ["'none'"],
+              connectSrc: ["'self'"],
+              imgSrc: ["'self'", 'data:'],
+              objectSrc: ["'none'"],
+              scriptSrc: ["'self'"],
+              styleSrc: ["'self'"],
+            },
+          }
+        : { directives: { defaultSrc: ["'none'"] } },
   });
   await app.register(csrfProtection, {
     cookieOpts: {
@@ -251,6 +268,20 @@ export async function buildApp(
     maxHeapUsedBytes: 512 * 1024 * 1024,
     maxRssBytes: 768 * 1024 * 1024,
   });
+  await app.register(swagger, {
+    openapi: {
+      openapi: '3.1.0',
+      info: { title: 'Promaly API', version: 'v1' },
+      servers: [{ url: '/v1', description: 'Same-origin API' }],
+    },
+  });
+  // Docker copies the Vite build here; API tests and local API development do
+  // not require static assets to exist.
+  const webDist = fileURLToPath(new URL('../../web/dist', import.meta.url));
+  const servesWeb = config.nodeEnv === 'production' && existsSync(webDist);
+  if (servesWeb) {
+    await app.register(fastifyStatic, { root: webDist, prefix: '/', wildcard: false });
+  }
 
   // Workspace authorization spine. Routes that operate inside a workspace add
   // `app.requireWorkspace` (resolves `request.principal`) then a
@@ -274,6 +305,7 @@ export async function buildApp(
       timestamp: new Date().toISOString(),
     }),
   );
+  app.get('/v1/openapi.json', { config: { rateLimit: false } }, async () => app.swagger());
 
   app.get('/readyz', { config: { rateLimit: false } }, async (_request, reply) => {
     try {
@@ -1523,6 +1555,14 @@ export async function buildApp(
       Number.isInteger(requested) ? Math.max(1, Math.min(100, requested)) : 20,
     );
   });
+  if (servesWeb) {
+    app.setNotFoundHandler((request, reply) => {
+      if (request.method === 'GET' && !request.url.startsWith('/v1/')) {
+        return reply.sendFile('index.html');
+      }
+      return reply.code(404).send({ error: 'Not found.' });
+    });
+  }
 
   return app;
 }
