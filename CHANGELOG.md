@@ -1,3 +1,10 @@
+## [0.4.1](https://github.com/Promaly/core/compare/v0.4.0...v0.4.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **db:** detect unique violations through Drizzle's error wrapper ([e014816](https://github.com/Promaly/core/commit/e0148161c920a3316fa267c9590e63181270b980))
+
 # [0.4.0](https://github.com/Promaly/core/compare/v0.3.0...v0.4.0) (2026-08-29)
 
 
