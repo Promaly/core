@@ -24,7 +24,11 @@ FROM node@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71
 
 WORKDIR /app
 ENV NODE_ENV=production
-RUN corepack enable
+# The runtime uses corepack -> pnpm for install and `node` directly to run.
+# npm is never invoked, and the copy bundled with the base image carries its own
+# (vendored, unpatched) dependency tree that the image scanner flags. Drop it.
+RUN corepack enable \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
