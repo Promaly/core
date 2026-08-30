@@ -17,15 +17,22 @@ export function createDatabaseClient(databaseUrl: string) {
     max: 10,
     onnotice: () => undefined,
   });
+  // A separate small pool for raw SQL (worker drain `sql.begin`, migration DDL,
+  // health check). Keeping it off the pool Drizzle owns means a Drizzle query
+  // and a raw transaction never share a connection.
+  const rawClient = postgres(databaseUrl, {
+    max: 4,
+    onnotice: () => undefined,
+  });
 
   return {
     db: drizzle({ client }),
-    raw: client,
+    raw: rawClient,
     async healthcheck() {
-      await client`select 1`;
+      await rawClient`select 1`;
     },
     async close() {
-      await client.end({ timeout: 5 });
+      await Promise.all([client.end({ timeout: 5 }), rawClient.end({ timeout: 5 })]);
     },
   };
 }
