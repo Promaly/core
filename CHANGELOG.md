@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/Promaly/core/compare/v0.7.4...v0.8.0) (2026-08-30)
+
+
+### Features
+
+* **contracts:** schemas + capabilities for comments, notifications, saved views ([7e60053](https://github.com/Promaly/core/commit/7e600539fd50dd88b1b1f94ea1dae0639e8335b8))
+
 ## [0.7.4](https://github.com/Promaly/core/compare/v0.7.3...v0.7.4) (2026-08-30)
 
 
