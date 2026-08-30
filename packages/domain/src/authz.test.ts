@@ -13,9 +13,21 @@ const EXPECTED: Record<CoreRole, Capability[]> = {
     'project.manage',
     'issue.create',
     'issue.edit',
+    'comment.create',
+    'comment.moderate',
+    'saved_view.manage_shared',
   ],
-  admin: ['workspace.read', 'member.manage', 'project.manage', 'issue.create', 'issue.edit'],
-  member: ['workspace.read', 'issue.create', 'issue.edit'],
+  admin: [
+    'workspace.read',
+    'member.manage',
+    'project.manage',
+    'issue.create',
+    'issue.edit',
+    'comment.create',
+    'comment.moderate',
+    'saved_view.manage_shared',
+  ],
+  member: ['workspace.read', 'issue.create', 'issue.edit', 'comment.create'],
   guest: ['workspace.read'],
 };
 
