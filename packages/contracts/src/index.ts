@@ -263,5 +263,73 @@ export const phase1EventTypes = [
   'issue.moved',
   'issue.relation.created',
   'issue.relation.deleted',
+  'comment.created',
+  'comment.updated',
+  'comment.deleted',
+  'attachment.added',
+  'attachment.removed',
+  'saved_view.created',
+  'saved_view.updated',
+  'saved_view.deleted',
 ] as const;
 export type Phase1EventType = (typeof phase1EventTypes)[number];
+
+// --- Comments -------------------------------------------------------------
+
+export const commentCreateRequestSchema = z.object({
+  body: z.string().trim().min(1).max(50_000),
+});
+export const commentUpdateRequestSchema = commentCreateRequestSchema;
+
+export type CommentCreateRequest = z.infer<typeof commentCreateRequestSchema>;
+
+// --- Notification preferences -------------------------------------------
+
+export const notificationPreferencesUpdateSchema = z
+  .object({
+    inApp: z.boolean().optional(),
+    email: z.boolean().optional(),
+    mentions: z.boolean().optional(),
+    assignments: z.boolean().optional(),
+    comments: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, 'At least one preference is required.');
+
+// --- Saved views -------------------------------------------------------
+
+/** Filter shape shared by the issue list query and stored saved views. */
+export const savedViewFiltersSchema = z
+  .object({
+    stateId: z.array(z.uuid()).max(50).optional(),
+    // `'none'` is the sentinel for "unassigned".
+    assigneeId: z
+      .array(z.union([z.uuid(), z.literal('none')]))
+      .max(50)
+      .optional(),
+    labelId: z.array(z.uuid()).max(50).optional(),
+    priority: z.array(issuePrioritySchema).max(5).optional(),
+    q: z.string().trim().max(200).optional(),
+  })
+  .strict();
+
+export const savedViewGroupBySchema = z.enum(['none', 'state', 'assignee', 'priority', 'label']);
+export const savedViewSortSchema = z.object({
+  field: z.enum(['manual', 'priority', 'updated', 'created']),
+  direction: z.enum(['asc', 'desc']).optional(),
+});
+
+export const savedViewCreateRequestSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  projectId: z.uuid().optional(),
+  scope: z.enum(['personal', 'shared']).default('personal'),
+  filters: savedViewFiltersSchema.default({}),
+  groupBy: savedViewGroupBySchema.default('none'),
+  sort: savedViewSortSchema.default({ field: 'manual' }),
+});
+export const savedViewUpdateRequestSchema = savedViewCreateRequestSchema
+  .omit({ scope: true })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, 'Saved view changes required.');
+
+export type SavedViewFilters = z.infer<typeof savedViewFiltersSchema>;
+export type SavedViewCreateRequest = z.infer<typeof savedViewCreateRequestSchema>;
