@@ -1,3 +1,10 @@
+## [0.7.4](https://github.com/Promaly/core/compare/v0.7.3...v0.7.4) (2026-08-30)
+
+
+### Bug Fixes
+
+* **deps:** clear the image vulnerability scan ([c2782f1](https://github.com/Promaly/core/commit/c2782f1cd64607cfafabd64247d2c1d77f630d38))
+
 ## [0.7.3](https://github.com/Promaly/core/compare/v0.7.2...v0.7.3) (2026-08-29)
 
 
