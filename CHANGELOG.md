@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/Promaly/core/compare/v0.9.0...v0.10.0) (2026-08-31)
+
+
+### Features
+
+* **worker:** notification.fanout handler + domain computeRecipients/shouldNotify ([#20](https://github.com/Promaly/core/issues/20)) ([1967ae9](https://github.com/Promaly/core/commit/1967ae9bf0c9336197fc12c2948e547a60996624))
+
 # [0.9.0](https://github.com/Promaly/core/compare/v0.8.0...v0.9.0) (2026-08-31)
 
 
