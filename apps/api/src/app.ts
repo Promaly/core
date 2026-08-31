@@ -68,6 +68,7 @@ import {
   TenancyNotFoundError,
   type TenancyService,
 } from './tenancy.js';
+import { createStorageClient, type StorageClient } from './storage.js';
 
 type ReadinessChecks = {
   database: () => Promise<void>;
@@ -81,6 +82,7 @@ type AppDependencies = {
   tenancy?: TenancyService | undefined;
   projectManagement?: ProjectManagementService | undefined;
   issues?: IssuesService | undefined;
+  storage?: StorageClient | undefined;
 };
 
 export type MetricsState = {
@@ -124,11 +126,15 @@ function createAppDependencies(config: AppConfig): AppDependencies {
     ? createDatabaseClient(config.databaseUrl)
     : undefined;
 
+  const storage =
+    config.s3Endpoint && config.s3AccessKeyId ? createStorageClient(config) : undefined;
+
   return {
     identity: database ? createIdentityService(database) : undefined,
     tenancy: database ? createTenancyService(database) : undefined,
     projectManagement: database ? createProjectManagementService(database) : undefined,
     issues: database ? createIssuesService(database) : undefined,
+    storage,
     readinessChecks: {
       async database() {
         if (!database) {
