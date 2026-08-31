@@ -3,6 +3,7 @@ import { loadConfig } from '@promaly/config';
 import { createDatabaseClient } from '@promaly/db';
 import { createMailPort } from '@promaly/domain';
 import { drainOutbox } from './drain.js';
+import { createNotificationFanout } from './notifications.js';
 
 const config = loadConfig(process.env);
 if (!config.databaseUrl) throw new Error('DATABASE_URL is required for the worker.');
@@ -10,6 +11,7 @@ if (!config.databaseUrl) throw new Error('DATABASE_URL is required for the worke
 const drainIntervalMs = 5_000;
 const database = createDatabaseClient(config.databaseUrl);
 const mail = createMailPort(config.smtpUrl, config.smtpFrom);
+const notificationsFanout = createNotificationFanout(database);
 let healthy = true;
 let running = false;
 let pending = 0;
@@ -20,7 +22,7 @@ async function tick() {
   if (running) return;
   running = true;
   try {
-    const result = await drainOutbox(database.raw, { mail });
+    const result = await drainOutbox(database.raw, { mail, notifications: notificationsFanout });
     pending = result.claimed - result.processed - result.deadLettered;
     processed += result.processed;
     deadLettered += result.deadLettered;

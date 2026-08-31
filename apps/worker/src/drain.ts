@@ -1,5 +1,6 @@
 import type { DatabaseClient } from '@promaly/db';
 import type { MailPort } from '@promaly/domain';
+import type { NotificationFanout } from './notifications.js';
 
 type Sql = DatabaseClient['raw'];
 
@@ -10,7 +11,7 @@ export type OutboxRow = {
   attempts: number;
 };
 
-export type DrainDeps = { mail: MailPort };
+export type DrainDeps = { mail: MailPort; notifications: NotificationFanout };
 export type DrainResult = {
   claimed: number;
   processed: number;
@@ -26,7 +27,6 @@ export type DrainResult = {
 const KNOWN_NOOP_EVENTS = new Set([
   'workspace.created',
   'workflow.seeded',
-  'notification.fanout',
   'invitation.created',
   'invitation.accepted',
   'invitation.revoked',
@@ -81,6 +81,10 @@ export async function dispatchEvent(event: OutboxRow, deps: DrainDeps): Promise<
     };
     if (!to || !subject || !text) throw new Error('email.send payload is incomplete');
     await deps.mail.send({ to, subject, text });
+    return;
+  }
+  if (event.type === 'notification.fanout') {
+    await deps.notifications.fanout(event.payload);
     return;
   }
   if (KNOWN_NOOP_EVENTS.has(event.type)) return;

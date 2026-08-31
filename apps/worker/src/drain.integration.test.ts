@@ -10,6 +10,9 @@ import type { MailMessage, MailPort } from '@promaly/domain';
 import { uuidv7 } from 'uuidv7';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { drainOutbox } from './drain.js';
+import type { NotificationFanout } from './notifications.js';
+
+const noopNotifications: NotificationFanout = { fanout: async () => undefined };
 
 const shouldRun = process.env.RUN_DATABASE_TESTS === 'true';
 
@@ -67,7 +70,7 @@ describe.skipIf(!shouldRun)('outbox drain', () => {
 
   it('delivers an email.send event and marks it processed', async () => {
     const id = await seed('email.send', { to: 'a@b.com', subject: 'Hi', text: 'Body' });
-    const result = await drainOutbox(database.raw, { mail });
+    const result = await drainOutbox(database.raw, { mail, notifications: noopNotifications });
 
     expect(result).toMatchObject({ claimed: 1, processed: 1, retried: 0, deadLettered: 0 });
     expect(sent).toEqual([{ to: 'a@b.com', subject: 'Hi', text: 'Body' }]);
@@ -76,7 +79,7 @@ describe.skipIf(!shouldRun)('outbox drain', () => {
 
   it('marks a known no-op event processed without sending mail', async () => {
     const id = await seed('workspace.created', { accountId: uuidv7() });
-    const result = await drainOutbox(database.raw, { mail });
+    const result = await drainOutbox(database.raw, { mail, notifications: noopNotifications });
 
     expect(result).toMatchObject({ claimed: 1, processed: 1 });
     expect(send).not.toHaveBeenCalled();
@@ -86,7 +89,7 @@ describe.skipIf(!shouldRun)('outbox drain', () => {
   it('schedules a backoff retry when dispatch fails', async () => {
     send.mockRejectedValueOnce(new Error('smtp down'));
     const id = await seed('email.send', { to: 'a@b.com', subject: 'Hi', text: 'Body' });
-    const result = await drainOutbox(database.raw, { mail });
+    const result = await drainOutbox(database.raw, { mail, notifications: noopNotifications });
 
     expect(result).toMatchObject({ processed: 0, retried: 1, deadLettered: 0 });
     const record = await row(id);
@@ -98,7 +101,7 @@ describe.skipIf(!shouldRun)('outbox drain', () => {
 
   it('dead-letters an event with no handler instead of retrying forever', async () => {
     const id = await seed('unknown.type', {});
-    const result = await drainOutbox(database.raw, { mail });
+    const result = await drainOutbox(database.raw, { mail, notifications: noopNotifications });
 
     expect(result).toMatchObject({ deadLettered: 1, retried: 0 });
     const record = await row(id);
@@ -112,7 +115,7 @@ describe.skipIf(!shouldRun)('outbox drain', () => {
       { to: 'a@b.com', subject: 'x', text: 'y' },
       new Date(Date.now() + 3_600_000),
     );
-    const result = await drainOutbox(database.raw, { mail });
+    const result = await drainOutbox(database.raw, { mail, notifications: noopNotifications });
     expect(result.claimed).toBe(0);
   });
 });

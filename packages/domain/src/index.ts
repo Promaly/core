@@ -6,6 +6,7 @@ export const coreRoles = ['owner', 'admin', 'member', 'guest'] as const;
 
 export * from './authz.js';
 export * from './issue-ordering.js';
+export * from './notifications.js';
 
 export type CoreRole = (typeof coreRoles)[number];
 export const issuePriorities = [0, 1, 2, 3, 4] as const;
