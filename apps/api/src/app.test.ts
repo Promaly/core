@@ -4,6 +4,7 @@ import type { IdentityService } from './identity.js';
 import type { ProjectManagementService } from './project-management.js';
 import type { IssuesService } from './issues.js';
 import type { TenancyService } from './tenancy.js';
+import type { StorageClient } from './storage.js';
 import { requireCapability } from './principal.js';
 import { buildApp, buildMetricsApp, createMetricsState } from './app.js';
 
@@ -19,6 +20,10 @@ const config = {
   s3Endpoint: undefined,
   s3Bucket: 'promaly',
   s3Region: 'us-east-1',
+  s3AccessKeyId: undefined,
+  s3SecretAccessKey: undefined,
+  s3ForcePathStyle: true,
+  maxAttachmentBytes: 26_214_400,
   smtpUrl: undefined,
   smtpFrom: undefined,
   workerHealthPort: 8081,
@@ -49,12 +54,14 @@ function buildTestApp(
   tenancy?: TenancyService,
   projectManagement?: ProjectManagementService,
   issues?: IssuesService,
+  storage?: StorageClient,
 ) {
   return buildApp(config, {
     identity,
     tenancy,
     projectManagement,
     issues,
+    storage,
     readinessChecks: {
       database: async () => undefined,
       objectStorage: async () => undefined,

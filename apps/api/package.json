@@ -13,6 +13,7 @@
     "test:integration": "RUN_DATABASE_TESTS=true vitest run src/*.integration.test.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.848.0",
     "@fastify/cookie": "^11.1.2",
     "@fastify/csrf-protection": "^7.1.0",
     "@fastify/helmet": "^13.1.1",

@@ -32,7 +32,7 @@ services:
       - |
         umask 077
         mkdir -p /run/promaly
-        for name in db_owner_password db_app_password minio_root_password; do
+        for name in db_owner_password db_app_password minio_root_password minio_svcacct_key minio_svcacct_secret; do
           f="/run/promaly/$$name"
           [ -s "$$f" ] || head -c 48 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$$f"
         done
@@ -139,6 +139,9 @@ services:
         mc alias set promaly http://minio:9000 promaly "$$(cat /run/promaly/minio_root_password)"
         mc mb --ignore-existing promaly/"$${PROMALY_S3_BUCKET:-promaly}"
         mc anonymous set none promaly/"$${PROMALY_S3_BUCKET:-promaly}"
+        mc admin user svcacct add promaly promaly \
+          --access-key "$$(cat /run/promaly/minio_svcacct_key)" \
+          --secret-key "$$(cat /run/promaly/minio_svcacct_secret)" 2>/dev/null || true
     environment:
       PROMALY_S3_BUCKET: ${PROMALY_S3_BUCKET:-promaly}
     volumes:
@@ -156,12 +159,15 @@ services:
       - -ec
       - |
         export DATABASE_URL="postgres://promaly_app:$$(cat /run/promaly/db_app_password)@postgres:5432/promaly"
+        export S3_ACCESS_KEY_ID="$$(cat /run/promaly/minio_svcacct_key)"
+        export S3_SECRET_ACCESS_KEY="$$(cat /run/promaly/minio_svcacct_secret)"
         exec node apps/api/dist/main.js
     environment:
       NODE_ENV: production
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${PROMALY_S3_BUCKET:-promaly}
       S3_REGION: ${S3_REGION:-us-east-1}
+      S3_FORCE_PATH_STYLE: 'true'
       SMTP_URL: ${SMTP_URL:-}
       SMTP_FROM: ${SMTP_FROM:-}
       # Metrics bind to the Compose network only (never published to the host).
@@ -206,12 +212,15 @@ services:
       - -ec
       - |
         export DATABASE_URL="postgres://promaly_app:$$(cat /run/promaly/db_app_password)@postgres:5432/promaly"
+        export S3_ACCESS_KEY_ID="$$(cat /run/promaly/minio_svcacct_key)"
+        export S3_SECRET_ACCESS_KEY="$$(cat /run/promaly/minio_svcacct_secret)"
         exec node apps/worker/dist/main.js
     environment:
       NODE_ENV: production
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${PROMALY_S3_BUCKET:-promaly}
       S3_REGION: ${S3_REGION:-us-east-1}
+      S3_FORCE_PATH_STYLE: 'true'
       SMTP_URL: ${SMTP_URL:-}
       SMTP_FROM: ${SMTP_FROM:-}
       WORKER_HEALTH_PORT: 8081
