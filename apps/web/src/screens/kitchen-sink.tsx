@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Combobox,
   EmptyState,
   Identifier,
   Input,
@@ -11,6 +12,8 @@ import {
   Label,
   LabelChip,
   PriorityIcon,
+  RadioGroup,
+  RadioGroupItem,
   Select,
   SelectContent,
   SelectItem,
@@ -18,6 +21,13 @@ import {
   SelectValue,
   Skeleton,
   StateIcon,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   Tabs,
   TabsContent,
   TabsList,
@@ -27,10 +37,17 @@ import {
   type Priority,
   type StateCategory,
 } from '@promaly/ui';
+import { useState } from 'react';
 import { useTheme, type ThemePreference } from '../theme.js';
 
 const STATES: StateCategory[] = ['backlog', 'unstarted', 'started', 'completed', 'cancelled'];
 const PRIORITIES: Priority[] = [0, 1, 2, 3, 4];
+
+const MEMBERS = [
+  { value: 'alice', label: 'Alice' },
+  { value: 'bob', label: 'Bob' },
+  { value: 'carol', label: 'Carol' },
+];
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -44,6 +61,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 /** Dev-only visual reference for the UI kit. Routed at `/kitchen-sink`. */
 export function KitchenSink() {
   const { preference, setPreference } = useTheme();
+  const [assignee, setAssignee] = useState('');
+  const [notifications, setNotifications] = useState(true);
+  const [scope, setScope] = useState('personal');
   return (
     <div className="mx-auto max-w-[880px] p-6">
       <div className="mb-4 flex items-center justify-between">
@@ -134,6 +154,52 @@ export function KitchenSink() {
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-2/3" />
         </div>
+      </Row>
+      <Row label="Combobox">
+        <Combobox
+          options={MEMBERS}
+          value={assignee}
+          onChange={setAssignee}
+          placeholder="Assign to…"
+        />
+      </Row>
+      <Row label="Switch">
+        <div className="flex items-center gap-2">
+          <Switch id="ks-switch" checked={notifications} onCheckedChange={setNotifications} />
+          <Label htmlFor="ks-switch">Email notifications {notifications ? 'on' : 'off'}</Label>
+        </div>
+      </Row>
+      <Row label="RadioGroup">
+        <RadioGroup value={scope} onValueChange={setScope} className="flex flex-row gap-4">
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="personal" id="ks-personal" />
+            <Label htmlFor="ks-personal">Personal</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="shared" id="ks-shared" />
+            <Label htmlFor="ks-shared">Shared</Label>
+          </div>
+        </RadioGroup>
+      </Row>
+      <Row label="Table">
+        <Table className="w-full">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Joined</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {MEMBERS.map((m) => (
+              <TableRow key={m.value}>
+                <TableCell>{m.label}</TableCell>
+                <TableCell className="text-muted-foreground">member</TableCell>
+                <TableCell className="text-muted-foreground">Aug 2026</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </Row>
       <div className="pt-8">
         <EmptyState

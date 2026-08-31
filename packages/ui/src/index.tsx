@@ -62,6 +62,19 @@ export { Toaster } from './components/sonner.js';
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './components/tabs.js';
 export { Textarea } from './components/textarea.js';
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './components/tooltip.js';
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+} from './components/table.js';
+export { Switch } from './components/switch.js';
+export { RadioGroup, RadioGroupItem } from './components/radio-group.js';
+export { Combobox, type ComboboxOption, type ComboboxProps } from './components/combobox.js';
 
 export { StateIcon, type StateCategory } from './domain/state-icon.js';
 export { PriorityIcon, PRIORITY_LABELS, type Priority } from './domain/priority-icon.js';
