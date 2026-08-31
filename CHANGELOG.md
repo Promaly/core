@@ -1,3 +1,10 @@
+# [0.11.0](https://github.com/Promaly/core/compare/v0.10.0...v0.11.0) (2026-08-31)
+
+
+### Features
+
+* **ui:** add table, switch, radio-group, and combobox components ([#21](https://github.com/Promaly/core/issues/21)) ([c173be6](https://github.com/Promaly/core/commit/c173be606e8ee640055a353b1d46aa8bf4c475ff))
+
 # [0.10.0](https://github.com/Promaly/core/compare/v0.9.0...v0.10.0) (2026-08-31)
 
 
