@@ -7,7 +7,9 @@ vi.mock('@aws-sdk/client-s3', () => {
   const PutObjectCommand = vi.fn().mockImplementation((input) => ({ _type: 'Put', ...input }));
   const GetObjectCommand = vi.fn().mockImplementation((input) => ({ _type: 'Get', ...input }));
   const HeadObjectCommand = vi.fn().mockImplementation((input) => ({ _type: 'Head', ...input }));
-  const DeleteObjectCommand = vi.fn().mockImplementation((input) => ({ _type: 'Delete', ...input }));
+  const DeleteObjectCommand = vi
+    .fn()
+    .mockImplementation((input) => ({ _type: 'Delete', ...input }));
   return { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand };
 });
 

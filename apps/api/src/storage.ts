@@ -16,7 +16,12 @@ export function createStorageClient(config: AppConfig) {
     forcePathStyle: config.s3ForcePathStyle,
     ...(config.s3Endpoint ? { endpoint: config.s3Endpoint } : {}),
     ...(config.s3AccessKeyId && config.s3SecretAccessKey
-      ? { credentials: { accessKeyId: config.s3AccessKeyId, secretAccessKey: config.s3SecretAccessKey } }
+      ? {
+          credentials: {
+            accessKeyId: config.s3AccessKeyId,
+            secretAccessKey: config.s3SecretAccessKey,
+          },
+        }
       : {}),
   };
   const client = new S3Client(clientConfig);
@@ -30,7 +35,13 @@ export function createStorageClient(config: AppConfig) {
       contentLength: number,
     ): Promise<void> {
       await client.send(
-        new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType, ContentLength: contentLength }),
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: body,
+          ContentType: contentType,
+          ContentLength: contentLength,
+        }),
       );
     },
 
@@ -39,7 +50,9 @@ export function createStorageClient(config: AppConfig) {
       return response.Body as Readable;
     },
 
-    async headObject(key: string): Promise<{ contentLength: number; contentType: string | undefined }> {
+    async headObject(
+      key: string,
+    ): Promise<{ contentLength: number; contentType: string | undefined }> {
       const response = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
       return { contentLength: response.ContentLength ?? 0, contentType: response.ContentType };
     },
