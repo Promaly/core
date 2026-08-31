@@ -125,8 +125,10 @@ export function Shell() {
   );
 }
 
-function matches(item: { to: string; exact?: boolean }, pathname: string) {
-  return item.exact ? pathname === item.to : pathname.startsWith(item.to);
+function matches(item: { to: string; exact?: boolean; matchPrefix?: string }, pathname: string) {
+  if (item.exact) return pathname === item.to;
+  if (item.matchPrefix) return pathname.startsWith(item.matchPrefix);
+  return pathname.startsWith(item.to);
 }
 
 function titleFromPath(pathname: string) {
@@ -151,7 +153,10 @@ function Sidebar({
   pathname: string;
 }) {
   const nav = canAdmin
-    ? [...NAV, { to: '/admin', label: 'Admin', icon: SquareUser } as const]
+    ? [
+        ...NAV,
+        { to: '/admin/members', label: 'Admin', icon: SquareUser, matchPrefix: '/admin' } as const,
+      ]
     : NAV;
 
   return (

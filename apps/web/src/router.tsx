@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router';
 import { Shell } from './shell.js';
 import { Invite, Login, Onboarding, Register, Reset, ResetConfirm } from './screens/auth.js';
 import { NewProjectScreen, PlaceholderScreen } from './screens/app.js';
@@ -7,6 +7,14 @@ import { BoardScreen } from './issues/board.js';
 import { IssueDetailScreen } from './issues/detail.js';
 import { IssueListScreen } from './issues/list.js';
 import { MyWorkScreen, ProjectsScreen, SearchScreen } from './issues/screens.js';
+import {
+  AdminLabelsScreen,
+  AdminMembersScreen,
+  AdminProjectsScreen,
+  AdminTeamsScreen,
+  AdminWorkflowsScreen,
+  AdminWorkspaceScreen,
+} from './admin/screens.js';
 
 const rootRoute = createRootRoute({ component: Shell });
 
@@ -38,12 +46,39 @@ const notificationsRoute = createRoute({
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
-  component: () => (
-    <PlaceholderScreen
-      title="Admin"
-      note="Workspace, members, and workflow settings arrive in a later slice."
-    />
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: '/admin/members' });
+  },
+});
+const adminMembersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/members',
+  component: AdminMembersScreen,
+});
+const adminTeamsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/teams',
+  component: AdminTeamsScreen,
+});
+const adminWorkflowsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/workflows',
+  component: AdminWorkflowsScreen,
+});
+const adminLabelsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/labels',
+  component: AdminLabelsScreen,
+});
+const adminProjectsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/projects',
+  component: AdminProjectsScreen,
+});
+const adminWorkspaceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/workspace',
+  component: AdminWorkspaceScreen,
 });
 const newProjectRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -116,6 +151,12 @@ const routeTree = rootRoute.addChildren([
   searchRoute,
   notificationsRoute,
   adminRoute,
+  adminMembersRoute,
+  adminTeamsRoute,
+  adminWorkflowsRoute,
+  adminLabelsRoute,
+  adminProjectsRoute,
+  adminWorkspaceRoute,
   newProjectRoute,
   projectBoardRoute,
   projectIssuesRoute,
