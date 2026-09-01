@@ -1,3 +1,11 @@
+# [0.12.0](https://github.com/Promaly/core/compare/v0.11.0...v0.12.0) (2026-09-01)
+
+
+### Features
+
+* **web:** add admin shell with RequireAdmin guard and AdminLayout ([#23](https://github.com/Promaly/core/issues/23)) ([f8c9c91](https://github.com/Promaly/core/commit/f8c9c9123fc53f46cece5039b2df40270594401c))
+* **web:** expand workspaceApi with full client surface ([#22](https://github.com/Promaly/core/issues/22)) ([984bf12](https://github.com/Promaly/core/commit/984bf123facd253f4bf83634addaabe8e42b28b9))
+
 # [0.11.0](https://github.com/Promaly/core/compare/v0.10.0...v0.11.0) (2026-08-31)
 
 
