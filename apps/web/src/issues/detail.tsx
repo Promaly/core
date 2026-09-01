@@ -20,7 +20,14 @@ import { Unlink } from 'lucide-react';
 import type { IssueRelation } from '../api.js';
 import { ApiError } from '../api.js';
 import { useIssueContext } from './context.js';
-import { useDeleteRelation, useIssue, useLabels, useRelations, useSubIssues, useUpdateIssue } from './data.js';
+import {
+  useDeleteRelation,
+  useIssue,
+  useLabels,
+  useRelations,
+  useSubIssues,
+  useUpdateIssue,
+} from './data.js';
 import { AssigneePicker, LabelPicker, PriorityPicker, StatePicker } from './pickers.js';
 import { ActivityFeed } from './activity.js';
 

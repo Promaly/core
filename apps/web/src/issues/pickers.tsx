@@ -189,9 +189,7 @@ export function LabelPicker({
           <button className="inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-[13px] hover:bg-secondary">
             <Tag className="size-3.5 text-muted-foreground" />
             <span className="text-muted-foreground">
-              {issue.labels.length > 0
-                ? issue.labels.map((l) => l.name).join(', ')
-                : 'No labels'}
+              {issue.labels.length > 0 ? issue.labels.map((l) => l.name).join(', ') : 'No labels'}
             </span>
           </button>
         )

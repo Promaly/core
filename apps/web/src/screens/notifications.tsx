@@ -13,11 +13,7 @@ import {
 } from '@promaly/ui';
 import { Bell, BellOff } from 'lucide-react';
 import type { Notification } from '../issues/data.js';
-import {
-  useMarkAllRead,
-  useMarkNotificationRead,
-  useNotifications,
-} from '../issues/data.js';
+import { useMarkAllRead, useMarkNotificationRead, useNotifications } from '../issues/data.js';
 
 function relativeTime(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -110,10 +106,7 @@ export function NotificationsScreen() {
       <div className="mb-5 flex items-center justify-between">
         <h1 className="text-[19px] font-semibold">Notifications</h1>
         <div className="flex items-center gap-3">
-          <Select
-            value={filter}
-            onValueChange={(v) => setFilter(v as 'all' | 'unread')}
-          >
+          <Select value={filter} onValueChange={(v) => setFilter(v as 'all' | 'unread')}>
             <SelectTrigger className="h-7 w-28 text-[12px]">
               <SelectValue />
             </SelectTrigger>

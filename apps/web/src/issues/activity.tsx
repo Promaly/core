@@ -3,12 +3,7 @@ import { Avatar, AvatarFallback, Button, Separator, Skeleton, Textarea, toast } 
 import type { ActivityEvent } from '../api.js';
 import { useSession } from '../session.js';
 import { initials } from './context.js';
-import {
-  useCreateComment,
-  useDeleteComment,
-  useTimeline,
-  useUpdateComment,
-} from './data.js';
+import { useCreateComment, useDeleteComment, useTimeline, useUpdateComment } from './data.js';
 
 // ── Activity event formatting ─────────────────────────────────────────────────
 
@@ -90,9 +85,7 @@ function CommentBlock({
       </Avatar>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-baseline gap-2">
-          <span className="text-[13px] font-medium">
-            {event.actorEmail.split('@')[0]}
-          </span>
+          <span className="text-[13px] font-medium">{event.actorEmail.split('@')[0]}</span>
           <span className="text-[12px] text-faint">{relativeTime(event.createdAt)}</span>
           {(event.data as { editedAt?: string }).editedAt && (
             <span className="text-[12px] text-faint">(edited)</span>
@@ -174,9 +167,7 @@ function ActivityRow({ event }: { event: ActivityEvent }) {
       <Avatar className="size-5 shrink-0">
         <AvatarFallback className="text-[9px]">{initials(event.actorEmail)}</AvatarFallback>
       </Avatar>
-      <span className="font-medium text-foreground">
-        {event.actorEmail.split('@')[0]}
-      </span>
+      <span className="font-medium text-foreground">{event.actorEmail.split('@')[0]}</span>
       <span>{activityText(event)}</span>
       <span className="ml-auto shrink-0 text-faint">{relativeTime(event.createdAt)}</span>
     </div>
@@ -185,13 +176,7 @@ function ActivityRow({ event }: { event: ActivityEvent }) {
 
 // ── Comment composer ──────────────────────────────────────────────────────────
 
-function CommentComposer({
-  issueId,
-  authorEmail,
-}: {
-  issueId: string;
-  authorEmail: string;
-}) {
+function CommentComposer({ issueId, authorEmail }: { issueId: string; authorEmail: string }) {
   const [body, setBody] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const create = useCreateComment(issueId);

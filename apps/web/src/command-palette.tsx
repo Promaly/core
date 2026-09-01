@@ -60,7 +60,11 @@ export function CommandPalette({
                 <CommandItem
                   key={hit.id}
                   value={`${hit.number} ${hit.title}`}
-                  onSelect={() => run(() => void navigate({ to: '/issues/$issueId', params: { issueId: hit.id } }))}
+                  onSelect={() =>
+                    run(
+                      () => void navigate({ to: '/issues/$issueId', params: { issueId: hit.id } }),
+                    )
+                  }
                 >
                   <Hash className="size-3.5 shrink-0 text-faint" />
                   <span className="mr-2 font-mono text-[12px] text-faint">{hit.number}</span>
