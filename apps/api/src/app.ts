@@ -78,6 +78,7 @@ import { createCommentsService, type CommentsService } from './comments.js';
 import { createTimelineService, type TimelineService } from './timeline.js';
 import { createNotificationsService, type NotificationsService } from './notifications.js';
 import { createSavedViewsService, type SavedViewsService } from './saved-views.js';
+import type { NotificationPreferences } from '@promaly/domain';
 
 type ReadinessChecks = {
   database: () => Promise<void>;
@@ -1786,7 +1787,7 @@ export async function buildApp(
         return reply.code(503).send({ error: 'Notifications are not configured.' });
       const patch = Object.fromEntries(
         Object.entries(input.data).filter(([, v]) => v !== undefined),
-      ) as import('@promaly/domain').NotificationPreferences;
+      ) as NotificationPreferences;
       return dependencies.notificationsApi.updatePreferences(
         request.principal.workspaceId,
         request.principal.accountId,
