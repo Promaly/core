@@ -38,6 +38,11 @@ import {
   workflowUpdateRequestSchema,
   workspaceCreateRequestSchema,
   workspaceUpdateRequestSchema,
+  commentCreateRequestSchema,
+  commentUpdateRequestSchema,
+  notificationPreferencesUpdateSchema,
+  savedViewCreateRequestSchema,
+  savedViewUpdateRequestSchema,
 } from '@promaly/contracts';
 import type { AppConfig } from '@promaly/config';
 import { createDatabaseClient, type DatabaseClient } from '@promaly/db';
@@ -69,6 +74,10 @@ import {
   type TenancyService,
 } from './tenancy.js';
 import { createStorageClient, type StorageClient } from './storage.js';
+import { createCommentsService, type CommentsService } from './comments.js';
+import { createTimelineService, type TimelineService } from './timeline.js';
+import { createNotificationsService, type NotificationsService } from './notifications.js';
+import { createSavedViewsService, type SavedViewsService } from './saved-views.js';
 
 type ReadinessChecks = {
   database: () => Promise<void>;
@@ -82,6 +91,10 @@ type AppDependencies = {
   tenancy?: TenancyService | undefined;
   projectManagement?: ProjectManagementService | undefined;
   issues?: IssuesService | undefined;
+  comments?: CommentsService | undefined;
+  timeline?: TimelineService | undefined;
+  notificationsApi?: NotificationsService | undefined;
+  savedViews?: SavedViewsService | undefined;
   storage?: StorageClient | undefined;
 };
 
@@ -134,6 +147,10 @@ function createAppDependencies(config: AppConfig): AppDependencies {
     tenancy: database ? createTenancyService(database) : undefined,
     projectManagement: database ? createProjectManagementService(database) : undefined,
     issues: database ? createIssuesService(database) : undefined,
+    comments: database ? createCommentsService(database) : undefined,
+    timeline: database ? createTimelineService(database) : undefined,
+    notificationsApi: database ? createNotificationsService(database) : undefined,
+    savedViews: database ? createSavedViewsService(database) : undefined,
     storage,
     readinessChecks: {
       async database() {
@@ -1564,6 +1581,298 @@ export async function buildApp(
       Number.isInteger(requested) ? Math.max(1, Math.min(100, requested)) : 20,
     );
   });
+  // ── Comments ──────────────────────────────────────────────────────────────
+
+  app.get(
+    '/v1/issues/:id/comments',
+    { preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.comments || !request.principal)
+        return reply.code(400).send({ error: 'Invalid issue.' });
+      const query = request.query as { cursor?: string; limit?: string };
+      const { cursor, limit } = page(query);
+      try {
+        return await dependencies.comments.listComments(
+          request.principal.workspaceId,
+          id,
+          cursor,
+          limit,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/issues/:id/comments',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace, requireCapability('issue.edit')] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = commentCreateRequestSchema.safeParse(request.body);
+      if (!id || !input.success) return reply.code(400).send({ error: 'Invalid comment input.' });
+      if (!dependencies.comments || !request.principal)
+        return reply.code(503).send({ error: 'Comments are not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.comments.createComment(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              id,
+              input.data.body,
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.patch(
+    '/v1/comments/:id',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = commentUpdateRequestSchema.safeParse(request.body);
+      if (!id || !input.success) return reply.code(400).send({ error: 'Invalid comment input.' });
+      if (!dependencies.comments || !request.principal)
+        return reply.code(503).send({ error: 'Comments are not configured.' });
+      try {
+        return await dependencies.comments.updateComment(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          input.data.body,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.delete(
+    '/v1/comments/:id',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.comments || !request.principal)
+        return reply.code(400).send({ error: 'Invalid comment.' });
+      try {
+        await dependencies.comments.deleteComment(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  // ── Timeline ──────────────────────────────────────────────────────────────
+
+  app.get(
+    '/v1/issues/:id/timeline',
+    { preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.timeline || !request.principal)
+        return reply.code(400).send({ error: 'Invalid issue.' });
+      const query = request.query as { cursor?: string; limit?: string };
+      const { cursor, limit } = page(query);
+      try {
+        return await dependencies.timeline.listTimeline(
+          request.principal.workspaceId,
+          id,
+          cursor,
+          limit,
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+
+  app.get('/v1/notifications', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    if (!dependencies.notificationsApi || !request.principal)
+      return reply.code(503).send({ error: 'Notifications are not configured.' });
+    const query = request.query as { cursor?: string; limit?: string; unread?: string };
+    const { cursor, limit } = page(query);
+    const opts: { cursor?: string; limit: number; unreadOnly: boolean } = {
+      limit,
+      unreadOnly: query.unread === 'true',
+    };
+    if (cursor) opts.cursor = cursor;
+    return dependencies.notificationsApi.listNotifications(
+      request.principal.workspaceId,
+      request.principal.accountId,
+      opts,
+    );
+  });
+
+  app.get(
+    '/v1/notifications/unread-count',
+    { preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      if (!dependencies.notificationsApi || !request.principal)
+        return reply.code(503).send({ error: 'Notifications are not configured.' });
+      return dependencies.notificationsApi.getUnreadCount(
+        request.principal.workspaceId,
+        request.principal.accountId,
+      );
+    },
+  );
+
+  app.post(
+    '/v1/notifications/:id/read',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.notificationsApi || !request.principal)
+        return reply.code(400).send({ error: 'Invalid notification.' });
+      try {
+        await dependencies.notificationsApi.markRead(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/v1/notifications/read-all',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      if (!dependencies.notificationsApi || !request.principal)
+        return reply.code(503).send({ error: 'Notifications are not configured.' });
+      await dependencies.notificationsApi.markAllRead(
+        request.principal.workspaceId,
+        request.principal.accountId,
+      );
+      return reply.code(204).send();
+    },
+  );
+
+  app.get(
+    '/v1/notification-preferences',
+    { preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      if (!dependencies.notificationsApi || !request.principal)
+        return reply.code(503).send({ error: 'Notifications are not configured.' });
+      return dependencies.notificationsApi.getPreferences(
+        request.principal.workspaceId,
+        request.principal.accountId,
+      );
+    },
+  );
+
+  app.patch(
+    '/v1/notification-preferences',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const input = notificationPreferencesUpdateSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid preferences input.' });
+      if (!dependencies.notificationsApi || !request.principal)
+        return reply.code(503).send({ error: 'Notifications are not configured.' });
+      const patch = Object.fromEntries(
+        Object.entries(input.data).filter(([, v]) => v !== undefined),
+      ) as import('@promaly/domain').NotificationPreferences;
+      return dependencies.notificationsApi.updatePreferences(
+        request.principal.workspaceId,
+        request.principal.accountId,
+        patch,
+      );
+    },
+  );
+
+  // ── Saved views ───────────────────────────────────────────────────────────
+
+  app.get('/v1/saved-views', { preHandler: [app.requireWorkspace] }, async (request, reply) => {
+    if (!dependencies.savedViews || !request.principal)
+      return reply.code(503).send({ error: 'Saved views are not configured.' });
+    return dependencies.savedViews.listSavedViews(
+      request.principal.workspaceId,
+      request.principal.accountId,
+    );
+  });
+
+  app.post(
+    '/v1/saved-views',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const input = savedViewCreateRequestSchema.safeParse(request.body);
+      if (!input.success) return reply.code(400).send({ error: 'Invalid saved view input.' });
+      if (!dependencies.savedViews || !request.principal)
+        return reply.code(503).send({ error: 'Saved views are not configured.' });
+      try {
+        return reply
+          .code(201)
+          .send(
+            await dependencies.savedViews.createSavedView(
+              request.principal.workspaceId,
+              request.principal.accountId,
+              input.data,
+            ),
+          );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.patch(
+    '/v1/saved-views/:id',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      const input = savedViewUpdateRequestSchema.safeParse(request.body);
+      if (!id || !input.success)
+        return reply.code(400).send({ error: 'Invalid saved view input.' });
+      if (!dependencies.savedViews || !request.principal)
+        return reply.code(503).send({ error: 'Saved views are not configured.' });
+      try {
+        return await dependencies.savedViews.updateSavedView(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+          input.data as Parameters<typeof dependencies.savedViews.updateSavedView>[3],
+        );
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
+  app.delete(
+    '/v1/saved-views/:id',
+    { onRequest: requireCsrf, preHandler: [app.requireWorkspace] },
+    async (request, reply) => {
+      const id = (request.params as { id?: string }).id;
+      if (!id || !dependencies.savedViews || !request.principal)
+        return reply.code(400).send({ error: 'Invalid saved view.' });
+      try {
+        await dependencies.savedViews.deleteSavedView(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          id,
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return tenancyFailure(error, reply);
+      }
+    },
+  );
+
   if (servesWeb) {
     app.setNotFoundHandler((request, reply) => {
       if (request.method === 'GET' && !request.url.startsWith('/v1/')) {
