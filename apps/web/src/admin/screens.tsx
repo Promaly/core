@@ -132,7 +132,9 @@ function InviteDialog() {
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Invite member</DialogTitle>
-            <DialogDescription>Send an invitation link to a new workspace member.</DialogDescription>
+            <DialogDescription>
+              Send an invitation link to a new workspace member.
+            </DialogDescription>
           </DialogHeader>
           <div className="mt-4 grid gap-3">
             <div className="grid gap-1.5">
@@ -148,10 +150,7 @@ function InviteDialog() {
             </div>
             <div className="grid gap-1.5">
               <FormLabel htmlFor="inv-role">Role</FormLabel>
-              <Select
-                value={role}
-                onValueChange={(v) => setRole(v as Exclude<CoreRole, 'owner'>)}
-              >
+              <Select value={role} onValueChange={(v) => setRole(v as Exclude<CoreRole, 'owner'>)}>
                 <SelectTrigger id="inv-role">
                   <SelectValue />
                 </SelectTrigger>
@@ -300,9 +299,7 @@ export function AdminMembersScreen() {
             {loadingMembers ? (
               <SkeletonRows cols={4} />
             ) : members?.length ? (
-              members.map((m) => (
-                <MemberRow key={m.accountId} member={m} currentId={currentId} />
-              ))
+              members.map((m) => <MemberRow key={m.accountId} member={m} currentId={currentId} />)
             ) : (
               <TableRow>
                 <TableCell colSpan={4}>
@@ -397,7 +394,14 @@ function CreateTeamDialog() {
                 id="team-key"
                 required
                 value={key || derivedKey}
-                onChange={(e) => setKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5))}
+                onChange={(e) =>
+                  setKey(
+                    e.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9]/g, '')
+                      .slice(0, 5),
+                  )
+                }
                 placeholder="ENG"
               />
             </div>
@@ -631,9 +635,7 @@ export function AdminTeamsScreen() {
             {loadingTeams ? (
               <SkeletonRows cols={4} />
             ) : teams?.length ? (
-              teams.map((t) => (
-                <TeamRow key={t.id} team={t} members={members ?? []} />
-              ))
+              teams.map((t) => <TeamRow key={t.id} team={t} members={members ?? []} />)
             ) : (
               <TableRow>
                 <TableCell colSpan={4}>
@@ -705,10 +707,7 @@ function AddStateDialog({ workflow }: { workflow: Workflow }) {
             </div>
             <div className="grid gap-1.5">
               <FormLabel htmlFor="state-category">Category</FormLabel>
-              <Select
-                value={category}
-                onValueChange={(v) => setCategory(v as StateCategory)}
-              >
+              <Select value={category} onValueChange={(v) => setCategory(v as StateCategory)}>
                 <SelectTrigger id="state-category">
                   <SelectValue />
                 </SelectTrigger>
@@ -796,10 +795,7 @@ function WorkflowCard({ workflow }: { workflow: Workflow }) {
                   className="flex items-center justify-between rounded px-2 py-1 hover:bg-secondary/50"
                 >
                   <div className="flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 rounded-full"
-                      style={{ background: state.color }}
-                    />
+                    <span className="h-3 w-3 rounded-full" style={{ background: state.color }} />
                     {editingId === state.id ? (
                       <Input
                         autoFocus
@@ -886,7 +882,10 @@ export function AdminWorkflowsScreen() {
         ) : workflows?.length ? (
           workflows.map((wf) => <WorkflowCard key={wf.id} workflow={wf} />)
         ) : (
-          <EmptyState title="No workflows" description="Create a workflow to manage issue states." />
+          <EmptyState
+            title="No workflows"
+            description="Create a workflow to manage issue states."
+          />
         )}
       </div>
     </AdminLayout>
@@ -992,7 +991,10 @@ function LabelRow({ label }: { label: Label }) {
           <LabelDialog
             initial={{ name: label.name, color: label.color }}
             onSave={(data) =>
-              update.mutate({ id: label.id, patch: data }, { onError: (e) => toast.error(e.message) })
+              update.mutate(
+                { id: label.id, patch: data },
+                { onError: (e) => toast.error(e.message) },
+              )
             }
             isPending={update.isPending}
             trigger={
@@ -1102,9 +1104,7 @@ export function AdminProjectsScreen() {
                       <Badge>Active</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {p.key}
-                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{p.key}</TableCell>
                   <TableCell className="text-right">
                     <Button
                       variant="ghost"
