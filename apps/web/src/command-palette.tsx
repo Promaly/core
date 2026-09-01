@@ -9,12 +9,13 @@ import {
   CommandList,
   CommandSeparator,
 } from '@promaly/ui';
-import { FolderKanban, CircleUser, LogOut, Plus, Search, Sun } from 'lucide-react';
+import { CircleUser, FolderKanban, Hash, LogOut, Plus, Search, Sun } from 'lucide-react';
 import { authApi } from './api.js';
+import { useIssueSearch } from './issues/data.js';
 import { useSessionActions } from './session.js';
 import { useTheme } from './theme.js';
 
-/** ⌘K palette (interaction-spec §6). Sections: Create · Go to · Account. */
+/** ⌘K palette (interaction-spec §6). Sections: Jump to · Create · Go to · Account. */
 export function CommandPalette({
   open,
   onOpenChange,
@@ -25,17 +26,52 @@ export function CommandPalette({
   const navigate = useNavigate();
   const session = useSessionActions();
   const { preference, setPreference } = useTheme();
+  const [query, setQuery] = useState('');
+
+  const searchResults = useIssueSearch(query);
+
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
 
   const run = (fn: () => void) => {
     onOpenChange(false);
     fn();
   };
 
+  const hasResults = query.trim().length > 1 && searchResults.data && searchResults.data.length > 0;
+
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Type a command or search…" />
+      <CommandInput
+        placeholder="Search issues or type a command…"
+        value={query}
+        onValueChange={setQuery}
+      />
       <CommandList>
-        <CommandEmpty>No results.</CommandEmpty>
+        <CommandEmpty>
+          {query.trim().length > 1 && !searchResults.isPending ? 'No results.' : 'Type to search…'}
+        </CommandEmpty>
+
+        {hasResults && (
+          <>
+            <CommandGroup heading="Jump to">
+              {searchResults.data!.map((hit) => (
+                <CommandItem
+                  key={hit.id}
+                  value={`${hit.number} ${hit.title}`}
+                  onSelect={() => run(() => void navigate({ to: '/issues/$issueId', params: { issueId: hit.id } }))}
+                >
+                  <Hash className="size-3.5 shrink-0 text-faint" />
+                  <span className="mr-2 font-mono text-[12px] text-faint">{hit.number}</span>
+                  <span className="truncate">{hit.title}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        )}
+
         <CommandGroup heading="Create">
           <CommandItem onSelect={() => run(() => void navigate({ to: '/projects/new' }))}>
             <Plus /> New project

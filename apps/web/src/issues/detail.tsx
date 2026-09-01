@@ -16,17 +16,29 @@ import {
   Textarea,
   toast,
 } from '@promaly/ui';
+import { Unlink } from 'lucide-react';
+import type { IssueRelation } from '../api.js';
 import { ApiError } from '../api.js';
 import { useIssueContext } from './context.js';
-import { useIssue, useSubIssues, useUpdateIssue } from './data.js';
-import { AssigneePicker, PriorityPicker, StatePicker } from './pickers.js';
+import { useDeleteRelation, useIssue, useLabels, useRelations, useSubIssues, useUpdateIssue } from './data.js';
+import { AssigneePicker, LabelPicker, PriorityPicker, StatePicker } from './pickers.js';
+import { ActivityFeed } from './activity.js';
 
 const md = new MarkdownIt({ linkify: true, breaks: true });
+
+const RELATION_LABELS: Record<IssueRelation['type'], string> = {
+  blocks: 'Blocks',
+  relates_to: 'Relates to',
+  duplicates: 'Duplicates',
+};
 
 export function IssueDetailScreen({ issueId }: { issueId: string }) {
   const context = useIssueContext();
   const query = useIssue(issueId);
   const subIssues = useSubIssues(issueId);
+  const relations = useRelations(issueId);
+  const deleteRelation = useDeleteRelation(issueId);
+  const { data: allLabels } = useLabels();
   const update = useUpdateIssue();
 
   const issue = query.data;
@@ -79,6 +91,12 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
 
   const patch = (body: Parameters<typeof update.mutate>[0]['patch']) =>
     update.mutate({ issue, patch: body }, { onError: () => toast('Could not save the change.') });
+
+  const toggleLabel = (labelId: string, active: boolean) => {
+    const current = issue.labels.map((l) => l.id);
+    const next = active ? current.filter((id) => id !== labelId) : [...current, labelId];
+    patch({ labelIds: next });
+  };
 
   return (
     <div className="mx-auto grid max-w-[1000px] grid-cols-[minmax(0,1fr)_260px] gap-8 p-6">
@@ -162,6 +180,51 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
             <p className="text-[13px] text-faint">No sub-issues.</p>
           )}
         </section>
+
+        <Separator className="my-6" />
+
+        <section>
+          <h2 className="mb-2 text-[13px] font-semibold">Relations</h2>
+          {relations.data && relations.data.length > 0 ? (
+            <ul className="flex flex-col gap-1.5">
+              {relations.data.map((rel) => {
+                const targetId =
+                  rel.sourceIssueId === issueId ? rel.targetIssueId : rel.sourceIssueId;
+                return (
+                  <li key={rel.id} className="flex items-center gap-2 text-[13px]">
+                    <span className="w-20 shrink-0 text-[12px] text-faint">
+                      {RELATION_LABELS[rel.type]}
+                    </span>
+                    <Link
+                      to="/issues/$issueId"
+                      params={{ issueId: targetId }}
+                      className="flex-1 truncate hover:underline"
+                    >
+                      <Identifier value={targetId.slice(0, 8)} className="mr-1.5" />
+                    </Link>
+                    <button
+                      className="text-faint hover:text-destructive"
+                      aria-label="Remove relation"
+                      onClick={() =>
+                        deleteRelation.mutate(rel.id, {
+                          onError: () => toast('Could not remove the relation.'),
+                        })
+                      }
+                    >
+                      <Unlink className="size-3.5" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-faint">No relations.</p>
+          )}
+        </section>
+
+        <Separator className="my-6" />
+
+        <ActivityFeed issueId={issueId} />
       </div>
 
       <aside className="flex flex-col gap-4 text-[13px]">
@@ -178,15 +241,20 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
             onPick={(assigneeId) => patch({ assigneeId })}
           />
         </Property>
-        {issue.labels.length > 0 && (
-          <Property label="Labels">
-            <div className="flex flex-wrap gap-1">
+        <Property label="Labels">
+          <LabelPicker
+            issue={issue}
+            labels={(allLabels ?? []).map((l) => ({ id: l.id, name: l.name, color: l.color }))}
+            onToggle={toggleLabel}
+          />
+          {issue.labels.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
               {issue.labels.map((label) => (
                 <LabelChip key={label.id} name={label.name} color={label.color} />
               ))}
             </div>
-          </Property>
-        )}
+          )}
+        </Property>
         <Property label="Revision">
           <span className="font-mono text-faint">r{issue.revision}</span>
         </Property>
