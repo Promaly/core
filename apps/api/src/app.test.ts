@@ -7,6 +7,7 @@ import type { TenancyService } from './tenancy.js';
 import type { StorageClient } from './storage.js';
 import { requireCapability } from './principal.js';
 import { buildApp, buildMetricsApp, createMetricsState } from './app.js';
+import { EventBroadcaster } from './events.js';
 
 const config = {
   nodeEnv: 'test' as const,
@@ -62,6 +63,7 @@ function buildTestApp(
     projectManagement,
     issues,
     storage,
+    broadcaster: new EventBroadcaster(),
     readinessChecks: {
       database: async () => undefined,
       objectStorage: async () => undefined,

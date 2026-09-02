@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
   workspaceApi,
   type ActivityEvent,
@@ -377,3 +377,38 @@ export function useDeleteSavedView() {
 
 // Re-export types needed by screens
 export type { ActivityEvent, IssueRelation, Notification };
+
+// ── Live events (SSE) ─────────────────────────────────────────────────────────
+
+/**
+ * Opens a Server-Sent Events connection for the active workspace.
+ * Invalidates all issue queries when the server reports a change,
+ * giving every open list/board/detail an automatic refresh.
+ */
+export function useWorkspaceEvents() {
+  const workspaceId = useWorkspaceId();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const url = `/v1/events?workspaceId=${encodeURIComponent(workspaceId)}`;
+    const source = new EventSource(url, { withCredentials: true });
+
+    source.onmessage = (event: MessageEvent<string>) => {
+      try {
+        const data = JSON.parse(event.data) as { type: string };
+        if (data.type === 'issue.changed') {
+          void queryClient.invalidateQueries({ queryKey: ['ws', workspaceId, 'issues'] });
+        }
+      } catch {
+        // ignore malformed events
+      }
+    };
+
+    source.onerror = () => {
+      source.close();
+    };
+
+    return () => source.close();
+  }, [workspaceId, queryClient]);
+}
