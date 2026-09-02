@@ -1,3 +1,15 @@
+# [0.15.0](https://github.com/Promaly/core/compare/v0.14.0...v0.15.0) (2026-09-02)
+
+
+### Bug Fixes
+
+* **api:** add broadcaster to buildTestApp fixture ([61bc824](https://github.com/Promaly/core/commit/61bc824d4ad4dbfd2ceb499f365200f0c8c3fe2a))
+
+
+### Features
+
+* **web,api:** wave f — sse live updates, keyboard shortcuts, onboarding polish ([4e1be7c](https://github.com/Promaly/core/commit/4e1be7c85a6c3908ee7f724b9f9ad668a14ab126))
+
 # [0.14.0](https://github.com/Promaly/core/compare/v0.13.0...v0.14.0) (2026-09-02)
 
 
