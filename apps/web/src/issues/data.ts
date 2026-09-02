@@ -9,6 +9,7 @@ import {
   type IssueRelation,
   type IssuePatch,
   type Notification,
+  type SavedViewFilters,
   type WorkspaceApi,
 } from '../api.js';
 import { useSession } from '../session.js';
@@ -37,6 +38,7 @@ const key = {
   relations: (ws: string, issueId: string) => ['ws', ws, 'issue', issueId, 'relations'] as const,
   notifications: (ws: string) => ['ws', ws, 'notifications'] as const,
   unreadCount: (ws: string) => ['ws', ws, 'notifications', 'unread-count'] as const,
+  savedViews: (ws: string) => ['ws', ws, 'saved-views'] as const,
 };
 
 export function useProjects() {
@@ -332,6 +334,44 @@ export function useMarkAllRead() {
       void queryClient.invalidateQueries({ queryKey: key.notifications(ws) });
       void queryClient.invalidateQueries({ queryKey: key.unreadCount(ws) });
     },
+  });
+}
+
+// ── Saved views ───────────────────────────────────────────────────────────────
+
+export function useSavedViews() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  return useQuery({
+    queryKey: key.savedViews(ws),
+    queryFn: () => client!.listSavedViews().then((r) => r.items),
+    enabled: Boolean(client),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateSavedView() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      filters: SavedViewFilters;
+      groupBy?: string;
+      sort?: string;
+    }) => client!.createSavedView({ scope: 'personal', ...body }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: key.savedViews(ws) }),
+  });
+}
+
+export function useDeleteSavedView() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => client!.deleteSavedView(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: key.savedViews(ws) }),
   });
 }
 

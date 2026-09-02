@@ -18,26 +18,42 @@ import {
   toast,
   type Priority,
 } from '@promaly/ui';
-import { ListFilter, Plus } from 'lucide-react';
-import type { Issue, IssueListParams } from '../api.js';
+import { Plus } from 'lucide-react';
+import type { Issue, IssueListParams, SavedView } from '../api.js';
 import { ApiError } from '../api.js';
 import { useIssueContext, type IssueContext } from './context.js';
 import { useBulkUpdate, useIssues, useUpdateIssue } from './data.js';
+import {
+  EMPTY_FILTERS,
+  FilterBar,
+  StateFilterChip,
+  ViewsMenu,
+  filtersToApi,
+  type FilterState,
+} from './filters.js';
 import { AssigneeAvatar, AssigneePicker, PriorityPicker, StatePicker } from './pickers.js';
 import { NewIssueDialog } from './new-issue.js';
 
 type Sort = NonNullable<IssueListParams['sort']>;
+type GroupBy = NonNullable<IssueListParams['groupBy']>;
 
 export function IssueListScreen({ projectKey }: { projectKey: string }) {
   const context = useIssueContext();
   const project = context.projectByKey(projectKey);
   const [sort, setSort] = useState<Sort>('manual');
-  const [grouped, setGrouped] = useState(true);
+  const [groupBy, setGroupBy] = useState<GroupBy>('state');
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [composerOpen, setComposerOpen] = useState(false);
 
   const params: IssueListParams = useMemo(
-    () => ({ projectId: project?.id, sort, groupBy: grouped ? 'state' : 'none', limit: 200 }),
-    [project?.id, sort, grouped],
+    () => ({
+      projectId: project?.id,
+      sort,
+      groupBy,
+      limit: 200,
+      ...filtersToApi(filters),
+    }),
+    [project?.id, sort, groupBy, filters],
   );
   const issues = useIssues(params);
 
@@ -49,22 +65,41 @@ export function IssueListScreen({ projectKey }: { projectKey: string }) {
 
   const states = context.statesForProject(project);
 
+  const applyView = (view: SavedView) => {
+    setFilters({
+      stateId: view.filters.stateId ?? [],
+      assigneeId: view.filters.assigneeId ?? [],
+      labelId: view.filters.labelId ?? [],
+      priority: view.filters.priority ?? [],
+    });
+    if (view.groupBy && ['state', 'assignee', 'priority', 'label', 'none'].includes(view.groupBy)) {
+      setGroupBy(view.groupBy as GroupBy);
+    }
+    if (view.sort && ['manual', 'priority', 'updated', 'created'].includes(view.sort)) {
+      setSort(view.sort as Sort);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-border px-4 py-2">
         <h1 className="text-[13px] font-semibold">{project?.name ?? projectKey}</h1>
         <span className="text-[13px] text-faint">{issues.data?.items.length ?? 0}</span>
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setGrouped((value) => !value)}
-            className={cn(grouped && 'text-foreground')}
-          >
-            <ListFilter className="size-3.5" /> {grouped ? 'Grouped' : 'Flat'}
-          </Button>
+          <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+            <SelectTrigger className="h-7 w-36 text-[12px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="state">Group: State</SelectItem>
+              <SelectItem value="assignee">Group: Assignee</SelectItem>
+              <SelectItem value="priority">Group: Priority</SelectItem>
+              <SelectItem value="none">No grouping</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={sort} onValueChange={(value) => setSort(value as Sort)}>
-            <SelectTrigger className="h-7 w-32 text-[12px]">
+            <SelectTrigger className="h-7 w-36 text-[12px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -74,10 +109,23 @@ export function IssueListScreen({ projectKey }: { projectKey: string }) {
               <SelectItem value="created">Recently created</SelectItem>
             </SelectContent>
           </Select>
+
+          <ViewsMenu filters={filters} groupBy={groupBy} sort={sort} onApply={applyView} />
+
           <Button size="sm" onClick={() => setComposerOpen(true)} disabled={!project}>
             <Plus className="size-3.5" /> New issue
           </Button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 border-b border-border px-4 py-1.5">
+        <StateFilterChip
+          filters={filters}
+          onChange={setFilters}
+          context={context}
+          projectId={project?.id}
+        />
+        <FilterBar filters={filters} onChange={setFilters} context={context} />
       </div>
 
       {issues.isPending ? (
@@ -89,8 +137,8 @@ export function IssueListScreen({ projectKey }: { projectKey: string }) {
       ) : issues.data && issues.data.items.length === 0 ? (
         <EmptyState
           icon={<Plus />}
-          title="No issues yet"
-          description="Create the first issue for this project."
+          title="No issues"
+          description="No issues match the current filters."
           action={
             <Button size="sm" onClick={() => setComposerOpen(true)}>
               New issue
@@ -102,7 +150,7 @@ export function IssueListScreen({ projectKey }: { projectKey: string }) {
           issues={issues.data?.items ?? []}
           context={context}
           states={states}
-          grouped={grouped}
+          groupBy={groupBy}
         />
       )}
 
@@ -122,12 +170,12 @@ function IssueRows({
   issues,
   context,
   states,
-  grouped,
+  groupBy,
 }: {
   issues: Issue[];
   context: IssueContext;
   states: ReturnType<IssueContext['statesForProject']>;
-  grouped: boolean;
+  groupBy: GroupBy;
 }) {
   const navigate = useNavigate();
   const update = useUpdateIssue();
@@ -136,13 +184,83 @@ function IssueRows({
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const ordered = useMemo(() => {
-    if (!grouped) return issues;
-    const byState = new Map(states.map((s) => [s.id, [] as Issue[]]));
-    const loose: Issue[] = [];
-    for (const issue of issues) (byState.get(issue.stateId) ?? loose).push(issue);
-    return [...states.flatMap((s) => byState.get(s.id) ?? []), ...loose];
-  }, [issues, states, grouped]);
+  type Group = { key: string; label: string; items: Issue[] };
+
+  const groups = useMemo((): Group[] => {
+    if (groupBy === 'none') {
+      return [{ key: 'all', label: '', items: issues }];
+    }
+    if (groupBy === 'state') {
+      const byState = new Map(
+        states.map((s) => [s.id, { key: s.id, label: s.name, items: [] as Issue[] }]),
+      );
+      const loose: Issue[] = [];
+      for (const issue of issues) {
+        const g = byState.get(issue.stateId);
+        if (g) g.items.push(issue);
+        else loose.push(issue);
+      }
+      const result = states.map((s) => byState.get(s.id)!).filter((g) => g.items.length > 0);
+      if (loose.length) result.push({ key: '__loose__', label: 'Other', items: loose });
+      return result;
+    }
+    if (groupBy === 'assignee') {
+      const byAssignee = new Map<string, Group>();
+      for (const issue of issues) {
+        const k = issue.assigneeId ?? '__unassigned__';
+        if (!byAssignee.has(k)) {
+          byAssignee.set(k, {
+            key: k,
+            label: k === '__unassigned__' ? 'Unassigned' : context.memberName(k),
+            items: [],
+          });
+        }
+        byAssignee.get(k)!.items.push(issue);
+      }
+      const sorted = [...byAssignee.values()].sort((a, b) => {
+        if (a.key === '__unassigned__') return 1;
+        if (b.key === '__unassigned__') return -1;
+        return a.label.localeCompare(b.label);
+      });
+      return sorted;
+    }
+    if (groupBy === 'priority') {
+      const names = ['No priority', 'Urgent', 'High', 'Medium', 'Low'];
+      const byPriority = new Map<number, Group>();
+      for (const issue of issues) {
+        const p = issue.priority ?? 0;
+        if (!byPriority.has(p)) {
+          byPriority.set(p, { key: String(p), label: names[p] ?? 'Unknown', items: [] });
+        }
+        byPriority.get(p)!.items.push(issue);
+      }
+      return [0, 1, 2, 3, 4]
+        .map((p) => byPriority.get(p))
+        .filter((g): g is Group => !!g && g.items.length > 0);
+    }
+    if (groupBy === 'label') {
+      const byLabel = new Map<string, Group>();
+      const unlabeled: Issue[] = [];
+      for (const issue of issues) {
+        if (issue.labels.length === 0) {
+          unlabeled.push(issue);
+        } else {
+          const label = issue.labels[0]!;
+          if (!byLabel.has(label.id)) {
+            byLabel.set(label.id, { key: label.id, label: label.name, items: [] });
+          }
+          byLabel.get(label.id)!.items.push(issue);
+        }
+      }
+      const result = [...byLabel.values()].sort((a, b) => a.label.localeCompare(b.label));
+      if (unlabeled.length)
+        result.push({ key: '__unlabeled__', label: 'No label', items: unlabeled });
+      return result;
+    }
+    return [{ key: 'all', label: '', items: issues }];
+  }, [issues, groupBy, states, context]);
+
+  const ordered = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 
   useEffect(() => {
     setActiveIndex((index) => Math.min(index, Math.max(0, ordered.length - 1)));
@@ -203,34 +321,20 @@ function IssueRows({
 
   return (
     <div className="relative flex-1 overflow-auto" ref={listRef} tabIndex={-1}>
-      {grouped
-        ? states.map((state) => {
-            const rows = ordered.filter((issue) => issue.stateId === state.id);
-            if (rows.length === 0) return null;
-            return (
-              <div key={state.id}>
-                <div className="sticky top-0 z-10 flex items-center gap-2 bg-background/95 px-4 py-1.5 text-[12px] font-medium text-muted-foreground backdrop-blur">
-                  <StateIcon category={state.category} color={state.color} />
-                  {state.name}
-                  <span className="text-faint">{rows.length}</span>
-                </div>
-                {rows.map((issue) => (
-                  <Row
-                    key={issue.id}
-                    issue={issue}
-                    context={context}
-                    states={states}
-                    active={ordered[activeIndex]?.id === issue.id}
-                    selected={selected.has(issue.id)}
-                    anySelected={anySelected}
-                    onSelect={() => toggleSelect(issue.id)}
-                    onPatch={patch}
-                  />
-                ))}
-              </div>
-            );
-          })
-        : ordered.map((issue) => (
+      {groups.map((group) => (
+        <div key={group.key}>
+          {groupBy !== 'none' && (
+            <div className="sticky top-0 z-10 flex items-center gap-2 bg-background/95 px-4 py-1.5 text-[12px] font-medium text-muted-foreground backdrop-blur">
+              {groupBy === 'state' &&
+                (() => {
+                  const s = states.find((st) => st.id === group.key);
+                  return s ? <StateIcon category={s.category} color={s.color} /> : null;
+                })()}
+              {group.label}
+              <span className="text-faint">{group.items.length}</span>
+            </div>
+          )}
+          {group.items.map((issue) => (
             <Row
               key={issue.id}
               issue={issue}
@@ -243,6 +347,8 @@ function IssueRows({
               onPatch={patch}
             />
           ))}
+        </div>
+      ))}
 
       {anySelected && (
         <div
