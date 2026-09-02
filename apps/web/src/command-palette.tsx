@@ -44,7 +44,7 @@ export function CommandPalette({
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <CommandInput
-        placeholder="Search issues or type a command…"
+        placeholder="Type a command or search…"
         value={query}
         onValueChange={setQuery}
       />
