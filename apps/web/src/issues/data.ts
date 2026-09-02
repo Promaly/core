@@ -6,6 +6,7 @@ import {
   type IssueListParams,
   type IssueListResult,
   type IssuePatch,
+  type SavedViewFilters,
   type WorkspaceApi,
 } from '../api.js';
 import { useSession } from '../session.js';
@@ -30,6 +31,7 @@ const key = {
   issue: (ws: string, id: string) => ['ws', ws, 'issue', id] as const,
   subIssues: (ws: string, id: string) => ['ws', ws, 'issue', id, 'sub'] as const,
   search: (ws: string, q: string) => ['ws', ws, 'search', q] as const,
+  savedViews: (ws: string) => ['ws', ws, 'saved-views'] as const,
 };
 
 export function useProjects() {
@@ -188,5 +190,41 @@ export function useBulkUpdate() {
   return useMutation({
     mutationFn: (issues: Parameters<WorkspaceApi['bulkUpdate']>[0]) => client!.bulkUpdate(issues),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['ws', ws, 'issues'] }),
+  });
+}
+
+export function useSavedViews() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  return useQuery({
+    queryKey: key.savedViews(ws),
+    queryFn: () => client!.listSavedViews().then((r) => r.items),
+    enabled: Boolean(client),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateSavedView() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      filters: SavedViewFilters;
+      groupBy?: string;
+      sort?: string;
+    }) => client!.createSavedView({ scope: 'personal', ...body }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: key.savedViews(ws) }),
+  });
+}
+
+export function useDeleteSavedView() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => client!.deleteSavedView(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: key.savedViews(ws) }),
   });
 }
