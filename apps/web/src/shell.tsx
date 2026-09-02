@@ -30,7 +30,9 @@ import {
 } from 'lucide-react';
 import { authApi } from './api.js';
 import { CommandPalette, useCommandPalette } from './command-palette.js';
-import { useProjects } from './issues/data.js';
+import { useIssueContext } from './issues/context.js';
+import { useProjects, useUnreadCount } from './issues/data.js';
+import { NewIssueDialog } from './issues/new-issue.js';
 import { useSession, useSessionActions } from './session.js';
 
 const PUBLIC_PREFIXES = [
@@ -60,6 +62,8 @@ export function Shell() {
   const publicRoute = isPublic(pathname);
   const { data: session, isPending } = useSession();
   const [railCollapsed, setRailCollapsed] = useState(false);
+  const [newIssueOpen, setNewIssueOpen] = useState(false);
+  const context = useIssueContext();
 
   useEffect(() => {
     if (!publicRoute && session === null) void navigate({ to: '/login' });
@@ -72,7 +76,7 @@ export function Shell() {
       if (target?.isContentEditable) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === '[') setRailCollapsed((value) => !value);
-      if (event.key.toLowerCase() === 'c') void navigate({ to: '/projects/new' });
+      if (event.key.toLowerCase() === 'c') setNewIssueOpen(true);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -98,6 +102,13 @@ export function Shell() {
   const workspace = session.workspaces[0];
   const canAdmin = workspace?.role === 'owner' || workspace?.role === 'admin';
 
+  // Derive current project from the pathname for the C shortcut
+  const projectKeyMatch = pathname.match(/^\/projects\/([^/]+)/);
+  const currentProjectKey = projectKeyMatch?.[1] ?? null;
+  const newIssueProject = currentProjectKey
+    ? context.projectByKey(currentProjectKey)
+    : context.projects[0];
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="grid h-full grid-cols-[auto_minmax(0,1fr)]">
@@ -121,6 +132,13 @@ export function Shell() {
       </div>
       <CommandPalette open={palette.open} onOpenChange={palette.setOpen} />
       <Toaster position="bottom-right" />
+      {newIssueProject && (
+        <NewIssueDialog
+          open={newIssueOpen}
+          onOpenChange={setNewIssueOpen}
+          projectId={newIssueProject.id}
+        />
+      )}
     </TooltipProvider>
   );
 }
@@ -152,6 +170,7 @@ function Sidebar({
   canAdmin: boolean;
   pathname: string;
 }) {
+  const { data: unreadCount } = useUnreadCount();
   const nav = canAdmin
     ? [
         ...NAV,
@@ -213,6 +232,8 @@ function Sidebar({
         {nav.map((item) => {
           const active = matches(item, pathname);
           const Icon = item.icon;
+          const isNotifications = item.to === '/notifications';
+          const badge = isNotifications && unreadCount ? unreadCount : 0;
           return (
             <Link
               key={item.to}
@@ -229,6 +250,11 @@ function Sidebar({
             >
               <Icon className="size-4 shrink-0" />
               {!collapsed && <span className="truncate">{item.label}</span>}
+              {badge > 0 && (
+                <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+                  {badge > 99 ? '99+' : badge}
+                </span>
+              )}
             </Link>
           );
         })}

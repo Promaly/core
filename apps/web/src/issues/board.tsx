@@ -17,6 +17,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import {
+  Button,
   EmptyState,
   Identifier,
   LabelDot,
@@ -27,6 +28,7 @@ import {
   toast,
   type Priority,
 } from '@promaly/ui';
+import { Plus } from 'lucide-react';
 import { ApiError, type Issue } from '../api.js';
 import { useIssueContext, type IssueContext } from './context.js';
 import { useIssues, useMoveIssue } from './data.js';
@@ -39,11 +41,13 @@ import {
   type FilterState,
 } from './filters.js';
 import { AssigneeAvatar } from './pickers.js';
+import { NewIssueDialog } from './new-issue.js';
 
 export function BoardScreen({ projectKey }: { projectKey: string }) {
   const context = useIssueContext();
   const project = context.projectByKey(projectKey);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [composerOpen, setComposerOpen] = useState(false);
   const issues = useIssues(
     useMemo(
       () => ({
@@ -108,16 +112,21 @@ export function BoardScreen({ projectKey }: { projectKey: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-border px-4 py-2">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
         <span className="text-[13px] font-semibold">{project?.name ?? projectKey} · Board</span>
-        {filtersActive(filters) && (
-          <button
-            className="text-[12px] text-muted-foreground hover:text-foreground"
-            onClick={() => setFilters(EMPTY_FILTERS)}
-          >
-            Clear filters
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {filtersActive(filters) && (
+            <button
+              className="text-[12px] text-muted-foreground hover:text-foreground"
+              onClick={() => setFilters(EMPTY_FILTERS)}
+            >
+              Clear filters
+            </button>
+          )}
+          <Button size="sm" onClick={() => setComposerOpen(true)} disabled={!project}>
+            <Plus className="size-3.5" /> New issue
+          </Button>
+        </div>
       </div>
       <div className="flex items-center gap-1.5 border-b border-border px-4 py-1.5">
         <StateFilterChip
@@ -167,6 +176,9 @@ export function BoardScreen({ projectKey }: { projectKey: string }) {
             ))}
           </div>
         </DndContext>
+      )}
+      {project && (
+        <NewIssueDialog open={composerOpen} onOpenChange={setComposerOpen} projectId={project.id} />
       )}
     </div>
   );

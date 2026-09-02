@@ -1,7 +1,8 @@
 import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router';
 import { Shell } from './shell.js';
 import { Invite, Login, Onboarding, Register, Reset, ResetConfirm } from './screens/auth.js';
-import { NewProjectScreen, PlaceholderScreen } from './screens/app.js';
+import { NewProjectScreen } from './screens/app.js';
+import { NotificationsScreen } from './screens/notifications.js';
 import { KitchenSink } from './screens/kitchen-sink.js';
 import { BoardScreen } from './issues/board.js';
 import { IssueDetailScreen } from './issues/detail.js';
@@ -36,12 +37,7 @@ const searchRoute = createRoute({
 const notificationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/notifications',
-  component: () => (
-    <PlaceholderScreen
-      title="Notifications"
-      note="Activity notifications arrive in a later slice."
-    />
-  ),
+  component: NotificationsScreen,
 });
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,

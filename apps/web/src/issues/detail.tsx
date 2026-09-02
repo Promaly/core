@@ -1,11 +1,12 @@
 import { Link } from '@tanstack/react-router';
 import DOMPurify from 'dompurify';
 import MarkdownIt from 'markdown-it';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   EmptyState,
   Identifier,
+  Input,
   LabelChip,
   Separator,
   Skeleton,
@@ -16,26 +17,73 @@ import {
   Textarea,
   toast,
 } from '@promaly/ui';
+import { Link2, Plus, Unlink } from 'lucide-react';
+import type { IssueRelation } from '../api.js';
 import { ApiError } from '../api.js';
 import { useIssueContext } from './context.js';
-import { useIssue, useSubIssues, useUpdateIssue } from './data.js';
-import { AssigneePicker, PriorityPicker, StatePicker } from './pickers.js';
+import {
+  useCreateIssue,
+  useCreateRelation,
+  useDeleteRelation,
+  useIssue,
+  useIssueSearch,
+  useLabels,
+  useRelations,
+  useSubIssues,
+  useUpdateIssue,
+} from './data.js';
+import { AssigneePicker, LabelPicker, PriorityPicker, StatePicker } from './pickers.js';
+import { ActivityFeed } from './activity.js';
+import { NewIssueDialog } from './new-issue.js';
 
 const md = new MarkdownIt({ linkify: true, breaks: true });
+
+const RELATION_LABELS: Record<IssueRelation['type'], string> = {
+  blocks: 'Blocks',
+  relates_to: 'Relates to',
+  duplicates: 'Duplicates',
+};
 
 export function IssueDetailScreen({ issueId }: { issueId: string }) {
   const context = useIssueContext();
   const query = useIssue(issueId);
   const subIssues = useSubIssues(issueId);
+  const relations = useRelations(issueId);
+  const deleteRelation = useDeleteRelation(issueId);
+  const createRelation = useCreateRelation(issueId);
+  const { data: allLabels } = useLabels();
   const update = useUpdateIssue();
+  const createSubIssue = useCreateIssue();
 
   const issue = query.data;
   const [draft, setDraft] = useState<string | null>(null);
   const [mode, setMode] = useState<'write' | 'preview'>('write');
 
+  // Inline title editing
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Sub-issue quick-create
+  const [subTitle, setSubTitle] = useState('');
+
+  // New sub-issue dialog
+  const [showNewSubIssue, setShowNewSubIssue] = useState(false);
+
+  // Add relation
+  const [showRelationPicker, setShowRelationPicker] = useState(false);
+  const [relationQuery, setRelationQuery] = useState('');
+  const [relationType, setRelationType] = useState<IssueRelation['type']>('relates_to');
+  const searchResults = useIssueSearch(relationQuery.length > 1 ? relationQuery : '');
+
   useEffect(() => {
     setDraft(null);
+    setEditingTitle(false);
   }, [issueId]);
+
+  useEffect(() => {
+    if (editingTitle) titleInputRef.current?.focus();
+  }, [editingTitle]);
 
   const previewHtml = useMemo(
     () => DOMPurify.sanitize(md.render(draft ?? issue?.description ?? '')),
@@ -77,8 +125,55 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
     );
   };
 
+  const saveTitle = () => {
+    if (!titleDraft.trim() || titleDraft === issue.title) {
+      setEditingTitle(false);
+      return;
+    }
+    update.mutate(
+      { issue, patch: { title: titleDraft.trim() } },
+      {
+        onSuccess: () => setEditingTitle(false),
+        onError: () => {
+          toast('Could not save the title.');
+          setEditingTitle(false);
+        },
+      },
+    );
+  };
+
   const patch = (body: Parameters<typeof update.mutate>[0]['patch']) =>
     update.mutate({ issue, patch: body }, { onError: () => toast('Could not save the change.') });
+
+  const toggleLabel = (labelId: string, active: boolean) => {
+    const current = issue.labels.map((l) => l.id);
+    const next = active ? current.filter((id) => id !== labelId) : [...current, labelId];
+    patch({ labelIds: next });
+  };
+
+  const submitSubIssue = () => {
+    if (!subTitle.trim()) return;
+    createSubIssue.mutate(
+      { projectId: issue.projectId, title: subTitle.trim(), parentIssueId: issue.id },
+      {
+        onSuccess: () => setSubTitle(''),
+        onError: () => toast('Could not create sub-issue.'),
+      },
+    );
+  };
+
+  const submitRelation = (targetIssueId: string) => {
+    createRelation.mutate(
+      { targetIssueId, type: relationType },
+      {
+        onSuccess: () => {
+          setShowRelationPicker(false);
+          setRelationQuery('');
+        },
+        onError: () => toast('Could not add relation.'),
+      },
+    );
+  };
 
   return (
     <div className="mx-auto grid max-w-[1000px] grid-cols-[minmax(0,1fr)_260px] gap-8 p-6">
@@ -97,7 +192,30 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
           <span>{context.identifier(issue)}</span>
         </nav>
 
-        <h1 className="text-[19px] font-semibold">{issue.title}</h1>
+        {editingTitle ? (
+          <Input
+            ref={titleInputRef}
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.currentTarget.value)}
+            className="mb-2 text-[19px] font-semibold"
+            onBlur={saveTitle}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') saveTitle();
+              if (e.key === 'Escape') setEditingTitle(false);
+            }}
+          />
+        ) : (
+          <h1
+            className="cursor-text text-[19px] font-semibold hover:bg-secondary/40 rounded px-1 -mx-1"
+            onClick={() => {
+              setTitleDraft(issue.title);
+              setEditingTitle(true);
+            }}
+            title="Click to edit title"
+          >
+            {issue.title}
+          </h1>
+        )}
 
         <div className="mt-4">
           <Tabs value={mode} onValueChange={(value) => setMode(value as 'write' | 'preview')}>
@@ -137,13 +255,24 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
         <Separator className="my-6" />
 
         <section>
-          <h2 className="mb-2 text-[13px] font-semibold">
-            Sub-issues{' '}
-            {subIssues.data && subIssues.data.length > 0 && (
-              <span className="text-faint">{subIssues.data.length}</span>
-            )}
-          </h2>
-          {subIssues.data && subIssues.data.length > 0 ? (
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-[13px] font-semibold">
+              Sub-issues{' '}
+              {subIssues.data && subIssues.data.length > 0 && (
+                <span className="text-faint">{subIssues.data.length}</span>
+              )}
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowNewSubIssue(true)}
+              className="h-6 gap-1 px-2 text-[12px]"
+            >
+              <Plus className="size-3" />
+              Add
+            </Button>
+          </div>
+          {subIssues.data && subIssues.data.length > 0 && (
             <ul className="flex flex-col">
               {subIssues.data.map((sub) => (
                 <li key={sub.id}>
@@ -158,10 +287,144 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
                 </li>
               ))}
             </ul>
+          )}
+          <div className="mt-2 flex gap-2">
+            <Input
+              placeholder="Quick add sub-issue…"
+              value={subTitle}
+              onChange={(e) => setSubTitle(e.currentTarget.value)}
+              className="h-8 text-[13px]"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submitSubIssue();
+                if (e.key === 'Escape') setSubTitle('');
+              }}
+            />
+            {subTitle.trim() && (
+              <Button
+                size="sm"
+                onClick={submitSubIssue}
+                disabled={createSubIssue.isPending}
+                className="h-8"
+              >
+                Add
+              </Button>
+            )}
+          </div>
+        </section>
+
+        <Separator className="my-6" />
+
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-[13px] font-semibold">Relations</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowRelationPicker((v) => !v)}
+              className="h-6 gap-1 px-2 text-[12px]"
+            >
+              <Link2 className="size-3" />
+              Add
+            </Button>
+          </div>
+
+          {showRelationPicker && (
+            <div className="mb-3 flex flex-col gap-2 rounded-md border border-border p-3">
+              <div className="flex gap-2">
+                <select
+                  value={relationType}
+                  onChange={(e) => setRelationType(e.currentTarget.value as IssueRelation['type'])}
+                  className="h-8 rounded border border-border bg-background px-2 text-[12px] text-foreground"
+                >
+                  <option value="relates_to">Relates to</option>
+                  <option value="blocks">Blocks</option>
+                  <option value="duplicates">Duplicates</option>
+                </select>
+                <Input
+                  placeholder="Search by title or identifier…"
+                  value={relationQuery}
+                  onChange={(e) => setRelationQuery(e.currentTarget.value)}
+                  className="h-8 flex-1 text-[13px]"
+                  autoFocus
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => {
+                    setShowRelationPicker(false);
+                    setRelationQuery('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+              {relationQuery.length > 1 && searchResults.data && (
+                <ul className="flex flex-col rounded-md border border-border">
+                  {searchResults.data.length === 0 ? (
+                    <li className="px-3 py-2 text-[13px] text-faint">No issues found.</li>
+                  ) : (
+                    searchResults.data.slice(0, 8).map((hit) => (
+                      <li key={hit.id}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-secondary"
+                          onClick={() => submitRelation(hit.id)}
+                          disabled={createRelation.isPending}
+                        >
+                          <span className="font-mono text-[11px] text-faint">
+                            {hit.projectId.slice(0, 4)}-{hit.number}
+                          </span>
+                          <span className="truncate">{hit.title}</span>
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {relations.data && relations.data.length > 0 ? (
+            <ul className="flex flex-col gap-1.5">
+              {relations.data.map((rel) => {
+                const targetId =
+                  rel.sourceIssueId === issueId ? rel.targetIssueId : rel.sourceIssueId;
+                return (
+                  <li key={rel.id} className="flex items-center gap-2 text-[13px]">
+                    <span className="w-20 shrink-0 text-[12px] text-faint">
+                      {RELATION_LABELS[rel.type]}
+                    </span>
+                    <Link
+                      to="/issues/$issueId"
+                      params={{ issueId: targetId }}
+                      className="flex-1 truncate hover:underline"
+                    >
+                      <Identifier value={targetId.slice(0, 8)} className="mr-1.5" />
+                    </Link>
+                    <button
+                      className="text-faint hover:text-destructive"
+                      aria-label="Remove relation"
+                      onClick={() =>
+                        deleteRelation.mutate(rel.id, {
+                          onError: () => toast('Could not remove the relation.'),
+                        })
+                      }
+                    >
+                      <Unlink className="size-3.5" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
-            <p className="text-[13px] text-faint">No sub-issues.</p>
+            !showRelationPicker && <p className="text-[13px] text-faint">No relations.</p>
           )}
         </section>
+
+        <Separator className="my-6" />
+
+        <ActivityFeed issueId={issueId} />
       </div>
 
       <aside className="flex flex-col gap-4 text-[13px]">
@@ -178,19 +441,31 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
             onPick={(assigneeId) => patch({ assigneeId })}
           />
         </Property>
-        {issue.labels.length > 0 && (
-          <Property label="Labels">
-            <div className="flex flex-wrap gap-1">
+        <Property label="Labels">
+          <LabelPicker
+            issue={issue}
+            labels={(allLabels ?? []).map((l) => ({ id: l.id, name: l.name, color: l.color }))}
+            onToggle={toggleLabel}
+          />
+          {issue.labels.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
               {issue.labels.map((label) => (
                 <LabelChip key={label.id} name={label.name} color={label.color} />
               ))}
             </div>
-          </Property>
-        )}
+          )}
+        </Property>
         <Property label="Revision">
           <span className="font-mono text-faint">r{issue.revision}</span>
         </Property>
       </aside>
+
+      <NewIssueDialog
+        open={showNewSubIssue}
+        onOpenChange={setShowNewSubIssue}
+        projectId={issue.projectId}
+        parentIssueId={issue.id}
+      />
     </div>
   );
 }

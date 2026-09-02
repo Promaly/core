@@ -7,6 +7,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  LabelDot,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -15,9 +16,9 @@ import {
   cn,
   type Priority,
 } from '@promaly/ui';
-import { Check } from 'lucide-react';
+import { Check, Tag } from 'lucide-react';
 import { type ReactNode } from 'react';
-import type { Issue, WorkflowState } from '../api.js';
+import type { Issue, IssueLabelRef, WorkflowState } from '../api.js';
 import { PRIORITY_NAMES, initials, type IssueContext } from './context.js';
 
 function PickerShell({
@@ -162,6 +163,56 @@ export function AssigneePicker({
               {member.accountId === issue.assigneeId && <Check className="size-3.5" />}
             </CommandItem>
           ))}
+        </CommandGroup>
+      </CommandList>
+    </PickerShell>
+  );
+}
+
+export function LabelPicker({
+  issue,
+  labels,
+  onToggle,
+  asChild,
+}: {
+  issue: Issue;
+  labels: IssueLabelRef[];
+  onToggle: (labelId: string, active: boolean) => void;
+  asChild?: ReactNode;
+}) {
+  const currentIds = new Set(issue.labels.map((l) => l.id));
+  return (
+    <PickerShell
+      label="Change labels"
+      trigger={
+        asChild ?? (
+          <button className="inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-[13px] hover:bg-secondary">
+            <Tag className="size-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">
+              {issue.labels.length > 0 ? issue.labels.map((l) => l.name).join(', ') : 'No labels'}
+            </span>
+          </button>
+        )
+      }
+    >
+      <CommandInput placeholder="Filter labels…" />
+      <CommandList>
+        <CommandEmpty>No labels found.</CommandEmpty>
+        <CommandGroup>
+          {labels.map((label) => {
+            const active = currentIds.has(label.id);
+            return (
+              <CommandItem
+                key={label.id}
+                value={label.name}
+                onSelect={() => onToggle(label.id, active)}
+              >
+                <LabelDot color={label.color} />
+                <span className="flex-1">{label.name}</span>
+                {active && <Check className="size-3.5" />}
+              </CommandItem>
+            );
+          })}
         </CommandGroup>
       </CommandList>
     </PickerShell>

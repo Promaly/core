@@ -2,10 +2,13 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { useMemo } from 'react';
 import {
   workspaceApi,
+  type ActivityEvent,
   type Issue,
   type IssueListParams,
   type IssueListResult,
+  type IssueRelation,
   type IssuePatch,
+  type Notification,
   type SavedViewFilters,
   type WorkspaceApi,
 } from '../api.js';
@@ -31,6 +34,10 @@ const key = {
   issue: (ws: string, id: string) => ['ws', ws, 'issue', id] as const,
   subIssues: (ws: string, id: string) => ['ws', ws, 'issue', id, 'sub'] as const,
   search: (ws: string, q: string) => ['ws', ws, 'search', q] as const,
+  timeline: (ws: string, issueId: string) => ['ws', ws, 'issue', issueId, 'timeline'] as const,
+  relations: (ws: string, issueId: string) => ['ws', ws, 'issue', issueId, 'relations'] as const,
+  notifications: (ws: string) => ['ws', ws, 'notifications'] as const,
+  unreadCount: (ws: string) => ['ws', ws, 'notifications', 'unread-count'] as const,
   savedViews: (ws: string) => ['ws', ws, 'saved-views'] as const,
 };
 
@@ -193,6 +200,145 @@ export function useBulkUpdate() {
   });
 }
 
+// ── Timeline + Comments ───────────────────────────────────────────────────────
+
+export function useTimeline(issueId: string | undefined) {
+  const ws = useWorkspaceId();
+  const client = useWorkspaceApi();
+  return useQuery({
+    queryKey: key.timeline(ws ?? '', issueId ?? ''),
+    queryFn: () => client!.listTimeline(issueId!).then((r) => r.items),
+    enabled: Boolean(client) && Boolean(issueId),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useCreateComment(issueId: string | undefined) {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) => client!.createComment(issueId!, { body }),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: key.timeline(ws, issueId ?? '') }),
+  });
+}
+
+export function useUpdateComment() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ commentId, body }: { commentId: string; body: string; issueId: string }) =>
+      client!.updateComment(commentId, { body }),
+    onSuccess: (_data, { issueId }) =>
+      void queryClient.invalidateQueries({ queryKey: key.timeline(ws, issueId) }),
+  });
+}
+
+export function useDeleteComment() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ commentId }: { commentId: string; issueId: string }) =>
+      client!.deleteComment(commentId),
+    onSuccess: (_data, { issueId }) =>
+      void queryClient.invalidateQueries({ queryKey: key.timeline(ws, issueId) }),
+  });
+}
+
+// ── Relations ─────────────────────────────────────────────────────────────────
+
+export function useRelations(issueId: string | undefined) {
+  const ws = useWorkspaceId();
+  const client = useWorkspaceApi();
+  return useQuery({
+    queryKey: key.relations(ws ?? '', issueId ?? ''),
+    queryFn: () => client!.listRelations(issueId!),
+    enabled: Boolean(client) && Boolean(issueId),
+  });
+}
+
+export function useCreateRelation(issueId: string | undefined) {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { targetIssueId: string; type: IssueRelation['type'] }) =>
+      client!.createRelation(issueId!, body),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: key.relations(ws, issueId ?? '') }),
+  });
+}
+
+export function useDeleteRelation(issueId: string | undefined) {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (relationId: string) => client!.deleteRelation(relationId),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: key.relations(ws, issueId ?? '') }),
+  });
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export function useNotifications(status?: 'unread' | 'read' | 'all') {
+  const ws = useWorkspaceId();
+  const client = useWorkspaceApi();
+  return useQuery({
+    queryKey: [...key.notifications(ws ?? ''), status] as const,
+    queryFn: () => {
+      const params: { status?: 'unread' | 'read' | 'all' } = {};
+      if (status) params.status = status;
+      return client!.listNotifications(params).then((r) => r.items);
+    },
+    enabled: Boolean(client),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useUnreadCount() {
+  const ws = useWorkspaceId();
+  const client = useWorkspaceApi();
+  return useQuery({
+    queryKey: key.unreadCount(ws ?? ''),
+    queryFn: () => client!.getUnreadCount().then((r) => r.count),
+    enabled: Boolean(client),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => client!.markNotificationRead(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: key.notifications(ws) });
+      void queryClient.invalidateQueries({ queryKey: key.unreadCount(ws) });
+    },
+  });
+}
+
+export function useMarkAllRead() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => client!.markAllNotificationsRead(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: key.notifications(ws) });
+      void queryClient.invalidateQueries({ queryKey: key.unreadCount(ws) });
+    },
+  });
+}
+
+// ── Saved views ───────────────────────────────────────────────────────────────
+
 export function useSavedViews() {
   const ws = useWorkspaceId() ?? '';
   const client = useWorkspaceApi();
@@ -228,3 +374,6 @@ export function useDeleteSavedView() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key.savedViews(ws) }),
   });
 }
+
+// Re-export types needed by screens
+export type { ActivityEvent, IssueRelation, Notification };
