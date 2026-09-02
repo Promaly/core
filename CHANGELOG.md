@@ -1,3 +1,22 @@
+# [0.13.0](https://github.com/Promaly/core/compare/v0.12.0...v0.13.0) (2026-09-02)
+
+
+### Bug Fixes
+
+* **api:** use top-level import type for notificationpreferences ([c5bceea](https://github.com/Promaly/core/commit/c5bceea2b8b85cf94b889f664539348b15c919ce))
+* **web:** apply prettier formatting to admin screens ([b112f09](https://github.com/Promaly/core/commit/b112f09071ff31f1e43bf6da3a7f7589c1ce0483))
+* **web:** apply prettier formatting to wave c screens ([0215949](https://github.com/Promaly/core/commit/0215949940970a9aa22c5a2ca5e73aeb3ff62d15))
+* **web:** restore command palette placeholder to match e2e test expectation ([4ed363a](https://github.com/Promaly/core/commit/4ed363a8790cadcf0383844affd14f0b916bc7eb))
+* **web:** restore command palette placeholder to match e2e test expectation ([27807e6](https://github.com/Promaly/core/commit/27807e6260690cbef117e5143f9bb51963022753))
+
+
+### Features
+
+* **api:** wave a — comments, timeline, notifications, saved views ([592e475](https://github.com/Promaly/core/commit/592e475ee035d265273297ff0ff51dff6adc66e7))
+* **web:** implement wave b admin screens ([9393a73](https://github.com/Promaly/core/commit/9393a733481fd24deb2151bf2f15883cc219a199))
+* **web:** wave c — activity feed, comments, notifications, relations ([03c1136](https://github.com/Promaly/core/commit/03c1136632f6ae1257e4ea781cbd12c55f830bac))
+* **web:** wave d — full new-issue dialog, inline title edit, sub-issue create, add relation ([b3bc92f](https://github.com/Promaly/core/commit/b3bc92f5f2746c63153c04ed4a61d6e02d91ddd5))
+
 # [0.12.0](https://github.com/Promaly/core/compare/v0.11.0...v0.12.0) (2026-09-01)
 
 
