@@ -78,6 +78,7 @@ import { createCommentsService, type CommentsService } from './comments.js';
 import { createTimelineService, type TimelineService } from './timeline.js';
 import { createNotificationsService, type NotificationsService } from './notifications.js';
 import { createSavedViewsService, type SavedViewsService } from './saved-views.js';
+import { EventBroadcaster } from './events.js';
 import type { NotificationPreferences } from '@promaly/domain';
 
 type ReadinessChecks = {
@@ -97,6 +98,7 @@ type AppDependencies = {
   notificationsApi?: NotificationsService | undefined;
   savedViews?: SavedViewsService | undefined;
   storage?: StorageClient | undefined;
+  broadcaster: EventBroadcaster;
 };
 
 export type MetricsState = {
@@ -153,6 +155,7 @@ function createAppDependencies(config: AppConfig): AppDependencies {
     notificationsApi: database ? createNotificationsService(database) : undefined,
     savedViews: database ? createSavedViewsService(database) : undefined,
     storage,
+    broadcaster: new EventBroadcaster(),
     readinessChecks: {
       async database() {
         if (!database) {
@@ -1313,16 +1316,14 @@ export async function buildApp(
       if (!dependencies.issues || !request.principal)
         return reply.code(503).send({ error: 'Issues are not configured.' });
       try {
-        return reply
-          .code(201)
-          .send(
-            await dependencies.issues.createIssue(
-              request.principal.workspaceId,
-              request.principal.accountId,
-              input.data,
-              requestMetadata(request),
-            ),
-          );
+        const issue = await dependencies.issues.createIssue(
+          request.principal.workspaceId,
+          request.principal.accountId,
+          input.data,
+          requestMetadata(request),
+        );
+        dependencies.broadcaster.emit(request.principal.workspaceId, { type: 'issue.changed' });
+        return reply.code(201).send(issue);
       } catch (error) {
         return tenancyFailure(error, reply);
       }
@@ -1354,13 +1355,15 @@ export async function buildApp(
       if (!dependencies.issues || !request.principal)
         return reply.code(503).send({ error: 'Issues are not configured.' });
       try {
-        return await dependencies.issues.updateIssue(
+        const issue = await dependencies.issues.updateIssue(
           request.principal.workspaceId,
           request.principal.accountId,
           id,
           revision,
           input.data,
         );
+        dependencies.broadcaster.emit(request.principal.workspaceId, { type: 'issue.changed' });
+        return issue;
       } catch (error) {
         return tenancyFailure(error, reply);
       }
@@ -1532,11 +1535,13 @@ export async function buildApp(
       if (!dependencies.issues || !request.principal)
         return reply.code(503).send({ error: 'Issues are not configured.' });
       try {
-        return await dependencies.issues.bulkUpdate(
+        const result = await dependencies.issues.bulkUpdate(
           request.principal.workspaceId,
           request.principal.accountId,
           input.data.issues,
         );
+        dependencies.broadcaster.emit(request.principal.workspaceId, { type: 'issue.changed' });
+        return result;
       } catch (error) {
         return tenancyFailure(error, reply);
       }
@@ -1557,13 +1562,15 @@ export async function buildApp(
       if (!dependencies.issues || !request.principal)
         return reply.code(503).send({ error: 'Issues are not configured.' });
       try {
-        return await dependencies.issues.moveIssue(
+        const issue = await dependencies.issues.moveIssue(
           request.principal.workspaceId,
           request.principal.accountId,
           id,
           expected,
           input.data,
         );
+        dependencies.broadcaster.emit(request.principal.workspaceId, { type: 'issue.changed' });
+        return issue;
       } catch (error) {
         return tenancyFailure(error, reply);
       }
@@ -1582,6 +1589,30 @@ export async function buildApp(
       Number.isInteger(requested) ? Math.max(1, Math.min(100, requested)) : 20,
     );
   });
+  // ── Server-Sent Events ────────────────────────────────────────────────────
+
+  app.get('/v1/events', { config: { rateLimit: false } }, async (request, reply) => {
+    const query = request.query as { workspaceId?: string };
+    const workspaceId = query.workspaceId;
+    if (!workspaceId) return reply.code(400).send({ error: 'workspaceId is required.' });
+    const token = request.cookies.promaly_session;
+    const session =
+      token && dependencies.identity ? await dependencies.identity.getSession(token) : null;
+    if (!session) return reply.code(401).send({ error: 'Authentication is required.' });
+    const membership = session.workspaces.find((ws) => ws.id === workspaceId);
+    if (!membership) return reply.code(404).send({ error: 'Workspace not found.' });
+
+    reply.raw.setHeader('Content-Type', 'text/event-stream');
+    reply.raw.setHeader('Cache-Control', 'no-cache');
+    reply.raw.setHeader('Connection', 'keep-alive');
+    reply.raw.flushHeaders();
+    reply.raw.write('data: {"type":"connected"}\n\n');
+    const unsubscribe = dependencies.broadcaster.subscribe(workspaceId, reply);
+    request.socket.on('close', unsubscribe);
+    await new Promise<void>((resolve) => request.socket.once('close', resolve));
+    return reply;
+  });
+
   // ── Comments ──────────────────────────────────────────────────────────────
 
   app.get(

@@ -1,6 +1,6 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
-import { EmptyState, Identifier, Input, Skeleton, StateIcon } from '@promaly/ui';
+import { Button, EmptyState, Identifier, Input, Skeleton, StateIcon } from '@promaly/ui';
 import { FolderKanban, Search as SearchIcon } from 'lucide-react';
 import { useSession } from '../session.js';
 import { useIssueContext } from './context.js';
@@ -9,6 +9,7 @@ import { AssigneeAvatar } from './pickers.js';
 
 export function ProjectsScreen() {
   const projects = useProjects();
+  const navigate = useNavigate();
 
   if (projects.isPending) {
     return (
@@ -24,8 +25,9 @@ export function ProjectsScreen() {
     return (
       <EmptyState
         icon={<FolderKanban />}
-        title="No projects yet"
-        description="Create a project from the command palette or the API to start tracking issues."
+        title="Create your first project"
+        description="Projects are the home for your issues, board, and team workflow."
+        action={<Button onClick={() => void navigate({ to: '/projects/new' })}>New project</Button>}
       />
     );
   }

@@ -31,9 +31,10 @@ import {
 import { authApi } from './api.js';
 import { CommandPalette, useCommandPalette } from './command-palette.js';
 import { useIssueContext } from './issues/context.js';
-import { useProjects, useUnreadCount } from './issues/data.js';
+import { useProjects, useUnreadCount, useWorkspaceEvents } from './issues/data.js';
 import { NewIssueDialog } from './issues/new-issue.js';
 import { useSession, useSessionActions } from './session.js';
+import { KeyboardShortcutsDialog } from './shortcuts.js';
 
 const PUBLIC_PREFIXES = [
   '/login',
@@ -63,7 +64,10 @@ export function Shell() {
   const { data: session, isPending } = useSession();
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [newIssueOpen, setNewIssueOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const context = useIssueContext();
+
+  useWorkspaceEvents();
 
   useEffect(() => {
     if (!publicRoute && session === null) void navigate({ to: '/login' });
@@ -77,6 +81,7 @@ export function Shell() {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === '[') setRailCollapsed((value) => !value);
       if (event.key.toLowerCase() === 'c') setNewIssueOpen(true);
+      if (event.key === '?') setShortcutsOpen(true);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -131,6 +136,7 @@ export function Shell() {
         </div>
       </div>
       <CommandPalette open={palette.open} onOpenChange={palette.setOpen} />
+      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <Toaster position="bottom-right" />
       {newIssueProject && (
         <NewIssueDialog
