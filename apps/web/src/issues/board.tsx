@@ -15,8 +15,9 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Link } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
+  Button,
   EmptyState,
   Identifier,
   LabelDot,
@@ -27,14 +28,17 @@ import {
   toast,
   type Priority,
 } from '@promaly/ui';
+import { Plus } from 'lucide-react';
 import { ApiError, type Issue } from '../api.js';
 import { useIssueContext, type IssueContext } from './context.js';
 import { useIssues, useMoveIssue } from './data.js';
 import { AssigneeAvatar } from './pickers.js';
+import { NewIssueDialog } from './new-issue.js';
 
 export function BoardScreen({ projectKey }: { projectKey: string }) {
   const context = useIssueContext();
   const project = context.projectByKey(projectKey);
+  const [composerOpen, setComposerOpen] = useState(false);
   const issues = useIssues(
     useMemo(
       () => ({
@@ -98,8 +102,13 @@ export function BoardScreen({ projectKey }: { projectKey: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-4 py-2 text-[13px] font-semibold">
-        {project?.name ?? projectKey} · Board
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+        <span className="text-[13px] font-semibold">{project?.name ?? projectKey} · Board</span>
+        <div className="ml-auto">
+          <Button size="sm" onClick={() => setComposerOpen(true)} disabled={!project}>
+            <Plus className="size-3.5" /> New issue
+          </Button>
+        </div>
       </div>
       {issues.isPending ? (
         <div className="flex gap-4 p-4">
@@ -140,6 +149,9 @@ export function BoardScreen({ projectKey }: { projectKey: string }) {
             ))}
           </div>
         </DndContext>
+      )}
+      {project && (
+        <NewIssueDialog open={composerOpen} onOpenChange={setComposerOpen} projectId={project.id} />
       )}
     </div>
   );
