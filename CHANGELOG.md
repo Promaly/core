@@ -1,3 +1,10 @@
+# [0.14.0](https://github.com/Promaly/core/compare/v0.13.0...v0.14.0) (2026-09-02)
+
+
+### Features
+
+* **web:** wave e — filter bar, group-by selector, saved views ([3262678](https://github.com/Promaly/core/commit/3262678cd52a04c053c6484e6c6d606ae0c390c8))
+
 # [0.13.0](https://github.com/Promaly/core/compare/v0.12.0...v0.13.0) (2026-09-02)
 
 
