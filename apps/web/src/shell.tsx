@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { authApi } from './api.js';
 import { CommandPalette, useCommandPalette } from './command-palette.js';
-import { useProjects } from './issues/data.js';
+import { useProjects, useUnreadCount } from './issues/data.js';
 import { useSession, useSessionActions } from './session.js';
 
 const PUBLIC_PREFIXES = [
@@ -152,6 +152,7 @@ function Sidebar({
   canAdmin: boolean;
   pathname: string;
 }) {
+  const { data: unreadCount } = useUnreadCount();
   const nav = canAdmin
     ? [
         ...NAV,
@@ -213,6 +214,8 @@ function Sidebar({
         {nav.map((item) => {
           const active = matches(item, pathname);
           const Icon = item.icon;
+          const isNotifications = item.to === '/notifications';
+          const badge = isNotifications && unreadCount ? unreadCount : 0;
           return (
             <Link
               key={item.to}
@@ -229,6 +232,11 @@ function Sidebar({
             >
               <Icon className="size-4 shrink-0" />
               {!collapsed && <span className="truncate">{item.label}</span>}
+              {badge > 0 && (
+                <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+                  {badge > 99 ? '99+' : badge}
+                </span>
+              )}
             </Link>
           );
         })}
