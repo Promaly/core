@@ -478,7 +478,6 @@ export function createIssuesService(database: DatabaseClient) {
         "assigneeId",
         "parentIssueId",
         "dueAt",
-        ,
         "estimate",
       ] as const) {
         if (input[key] !== undefined && input[key] !== current[key])
