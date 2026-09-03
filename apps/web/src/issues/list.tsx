@@ -475,6 +475,12 @@ function Row({
         </span>
       )}
 
+      {issue.estimate != null && (
+        <span className="hidden shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-faint md:block">
+          {issue.estimate}pt
+        </span>
+      )}
+
       <PriorityPicker
         issue={issue}
         onPick={(priority) => onPatch(issue, { priority })}
