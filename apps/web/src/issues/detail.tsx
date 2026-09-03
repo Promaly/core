@@ -481,7 +481,10 @@ function DueDatePicker({
   onPick: (dueAt: string | null) => void;
 }) {
   const value = issue.dueAt ? issue.dueAt.slice(0, 10) : '';
-  const isOverdue = issue.dueAt && new Date(issue.dueAt) < new Date() && issue.dueAt.slice(0, 10) !== new Date().toISOString().slice(0, 10);
+  const isOverdue =
+    issue.dueAt &&
+    new Date(issue.dueAt) < new Date() &&
+    issue.dueAt.slice(0, 10) !== new Date().toISOString().slice(0, 10);
   return (
     <input
       type="date"
