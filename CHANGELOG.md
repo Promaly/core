@@ -1,3 +1,10 @@
+## [0.17.1](https://github.com/Promaly/core/compare/v0.17.0...v0.17.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **worker:** move uuidv7 to runtime dependencies ([#36](https://github.com/Promaly/core/issues/36)) ([293387b](https://github.com/Promaly/core/commit/293387b0ffa17b8968be774e32d8cb43029485c1))
+
 # [0.17.0](https://github.com/Promaly/core/compare/v0.16.0...v0.17.0) (2026-09-03)
 
 
