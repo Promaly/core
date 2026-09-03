@@ -16,13 +16,13 @@
     "@promaly/config": "workspace:*",
     "@promaly/db": "workspace:*",
     "@promaly/domain": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "uuidv7": "^1.2.1"
   },
   "devDependencies": {
     "tsx": "^4.20.5",
     "vitest": "^3.2.4",
     "@testcontainers/postgresql": "^12.1.0",
-    "testcontainers": "^12.1.0",
-    "uuidv7": "^1.2.1"
+    "testcontainers": "^12.1.0"
   }
 }
