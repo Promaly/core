@@ -1,19 +1,14 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 export const healthResponseSchema = z.object({
-  status: z.literal("ok"),
-  service: z.literal("api"),
+  status: z.literal('ok'),
+  service: z.literal('api'),
   timestamp: z.iso.datetime(),
 });
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
-export const workspaceRoleSchema = z.enum([
-  "owner",
-  "admin",
-  "member",
-  "guest",
-]);
+export const workspaceRoleSchema = z.enum(['owner', 'admin', 'member', 'guest']);
 
 export const registerRequestSchema = z.object({
   email: z.email().max(254),
@@ -57,7 +52,7 @@ export type AuthenticatedSession = z.infer<typeof authenticatedSessionSchema>;
 
 export const invitationRequestSchema = z.object({
   email: z.email().max(254),
-  role: workspaceRoleSchema.exclude(["owner"]),
+  role: workspaceRoleSchema.exclude(['owner']),
 });
 
 export const invitationAcceptRequestSchema = z.object({
@@ -87,7 +82,7 @@ export const workspaceUpdateRequestSchema = workspaceCreateRequestSchema
   .partial()
   .refine(
     (value) => value.name !== undefined || value.slug !== undefined,
-    "At least one workspace field is required.",
+    'At least one workspace field is required.',
   );
 
 export const memberRoleUpdateRequestSchema = z.object({
@@ -95,11 +90,11 @@ export const memberRoleUpdateRequestSchema = z.object({
 });
 
 export const workflowStateCategorySchema = z.enum([
-  "backlog",
-  "unstarted",
-  "started",
-  "completed",
-  "cancelled",
+  'backlog',
+  'unstarted',
+  'started',
+  'completed',
+  'cancelled',
 ]);
 
 export const teamCreateRequestSchema = z.object({
@@ -113,7 +108,7 @@ export const teamUpdateRequestSchema = teamCreateRequestSchema
   .partial()
   .refine(
     (value) => value.name !== undefined || value.key !== undefined,
-    "At least one team field is required.",
+    'At least one team field is required.',
   );
 export const teamMemberRequestSchema = z.object({ accountId: z.uuid() });
 
@@ -125,7 +120,7 @@ export const workflowUpdateRequestSchema = workflowCreateRequestSchema
   .partial()
   .refine(
     (value) => value.name !== undefined || value.isDefault !== undefined,
-    "At least one workflow field is required.",
+    'At least one workflow field is required.',
   );
 export const workflowStateCreateRequestSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -146,7 +141,7 @@ export const workflowStateUpdateRequestSchema = z
   })
   .refine(
     (value) => value.name !== undefined || value.color !== undefined,
-    "State changes required.",
+    'State changes required.',
   );
 export const workflowStateReorderRequestSchema = z.object({
   stateIds: z.array(z.uuid()).min(2).max(100),
@@ -171,10 +166,7 @@ export const projectCreateRequestSchema = z.object({
 });
 export const projectUpdateRequestSchema = projectCreateRequestSchema
   .partial()
-  .refine(
-    (value) => Object.keys(value).length > 0,
-    "Project changes required.",
-  );
+  .refine((value) => Object.keys(value).length > 0, 'Project changes required.');
 
 export const labelCreateRequestSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -189,7 +181,7 @@ export const labelUpdateRequestSchema = labelCreateRequestSchema
   .partial()
   .refine(
     (value) => value.name !== undefined || value.color !== undefined,
-    "Label changes required.",
+    'Label changes required.',
   );
 
 export const issuePrioritySchema = z.int().min(0).max(4);
@@ -208,13 +200,9 @@ export const issueCreateRequestSchema = z.object({
 export const issueUpdateRequestSchema = issueCreateRequestSchema
   .omit({ projectId: true })
   .partial()
-  .refine((value) => Object.keys(value).length > 0, "Issue changes required.");
+  .refine((value) => Object.keys(value).length > 0, 'Issue changes required.');
 export const issueArchiveRequestSchema = z.object({});
-export const issueRelationTypeSchema = z.enum([
-  "blocks",
-  "relates_to",
-  "duplicates",
-]);
+export const issueRelationTypeSchema = z.enum(['blocks', 'relates_to', 'duplicates']);
 export const issueRelationCreateRequestSchema = z.object({
   targetIssueId: z.uuid(),
   type: issueRelationTypeSchema,
@@ -242,51 +230,49 @@ export const issueMoveRequestSchema = z
   })
   .refine(
     (value) =>
-      value.beforeId !== undefined ||
-      value.afterId !== undefined ||
-      value.stateId !== undefined,
-    "A destination is required.",
+      value.beforeId !== undefined || value.afterId !== undefined || value.stateId !== undefined,
+    'A destination is required.',
   );
 
 export const phase1EventTypes = [
-  "workspace.created",
-  "workflow.seeded",
-  "notification.fanout",
-  "email.send",
-  "invitation.created",
-  "invitation.accepted",
-  "invitation.revoked",
-  "membership.changed",
-  "workspace.updated",
-  "workspace.deleted",
-  "team.created",
-  "team.updated",
-  "team.deleted",
-  "team.members.changed",
-  "workflow.created",
-  "workflow.updated",
-  "workflow.state.changed",
-  "project.created",
-  "project.updated",
-  "project.archived",
-  "project.unarchived",
-  "label.created",
-  "label.updated",
-  "label.deleted",
-  "issue.created",
-  "issue.updated",
-  "issue.archived",
-  "issue.moved",
-  "issue.relation.created",
-  "issue.relation.deleted",
-  "comment.created",
-  "comment.updated",
-  "comment.deleted",
-  "attachment.added",
-  "attachment.removed",
-  "saved_view.created",
-  "saved_view.updated",
-  "saved_view.deleted",
+  'workspace.created',
+  'workflow.seeded',
+  'notification.fanout',
+  'email.send',
+  'invitation.created',
+  'invitation.accepted',
+  'invitation.revoked',
+  'membership.changed',
+  'workspace.updated',
+  'workspace.deleted',
+  'team.created',
+  'team.updated',
+  'team.deleted',
+  'team.members.changed',
+  'workflow.created',
+  'workflow.updated',
+  'workflow.state.changed',
+  'project.created',
+  'project.updated',
+  'project.archived',
+  'project.unarchived',
+  'label.created',
+  'label.updated',
+  'label.deleted',
+  'issue.created',
+  'issue.updated',
+  'issue.archived',
+  'issue.moved',
+  'issue.relation.created',
+  'issue.relation.deleted',
+  'comment.created',
+  'comment.updated',
+  'comment.deleted',
+  'attachment.added',
+  'attachment.removed',
+  'saved_view.created',
+  'saved_view.updated',
+  'saved_view.deleted',
 ] as const;
 export type Phase1EventType = (typeof phase1EventTypes)[number];
 
@@ -309,10 +295,7 @@ export const notificationPreferencesUpdateSchema = z
     assignments: z.boolean().optional(),
     comments: z.boolean().optional(),
   })
-  .refine(
-    (value) => Object.keys(value).length > 0,
-    "At least one preference is required.",
-  );
+  .refine((value) => Object.keys(value).length > 0, 'At least one preference is required.');
 
 // --- Saved views -------------------------------------------------------
 
@@ -322,7 +305,7 @@ export const savedViewFiltersSchema = z
     stateId: z.array(z.uuid()).max(50).optional(),
     // `'none'` is the sentinel for "unassigned".
     assigneeId: z
-      .array(z.union([z.uuid(), z.literal("none")]))
+      .array(z.union([z.uuid(), z.literal('none')]))
       .max(50)
       .optional(),
     labelId: z.array(z.uuid()).max(50).optional(),
@@ -331,35 +314,24 @@ export const savedViewFiltersSchema = z
   })
   .strict();
 
-export const savedViewGroupBySchema = z.enum([
-  "none",
-  "state",
-  "assignee",
-  "priority",
-  "label",
-]);
+export const savedViewGroupBySchema = z.enum(['none', 'state', 'assignee', 'priority', 'label']);
 export const savedViewSortSchema = z.object({
-  field: z.enum(["manual", "priority", "updated", "created"]),
-  direction: z.enum(["asc", "desc"]).optional(),
+  field: z.enum(['manual', 'priority', 'updated', 'created']),
+  direction: z.enum(['asc', 'desc']).optional(),
 });
 
 export const savedViewCreateRequestSchema = z.object({
   name: z.string().trim().min(1).max(100),
   projectId: z.uuid().optional(),
-  scope: z.enum(["personal", "shared"]).default("personal"),
+  scope: z.enum(['personal', 'shared']).default('personal'),
   filters: savedViewFiltersSchema.default({}),
-  groupBy: savedViewGroupBySchema.default("none"),
-  sort: savedViewSortSchema.default({ field: "manual" }),
+  groupBy: savedViewGroupBySchema.default('none'),
+  sort: savedViewSortSchema.default({ field: 'manual' }),
 });
 export const savedViewUpdateRequestSchema = savedViewCreateRequestSchema
   .omit({ scope: true })
   .partial()
-  .refine(
-    (value) => Object.keys(value).length > 0,
-    "Saved view changes required.",
-  );
+  .refine((value) => Object.keys(value).length > 0, 'Saved view changes required.');
 
 export type SavedViewFilters = z.infer<typeof savedViewFiltersSchema>;
-export type SavedViewCreateRequest = z.infer<
-  typeof savedViewCreateRequestSchema
->;
+export type SavedViewCreateRequest = z.infer<typeof savedViewCreateRequestSchema>;
