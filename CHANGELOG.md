@@ -1,3 +1,16 @@
+# [0.16.0](https://github.com/Promaly/core/compare/v0.15.0...v0.16.0) (2026-09-03)
+
+
+### Bug Fixes
+
+* **worker:** move drizzle-orm to production dependencies ([d15073e](https://github.com/Promaly/core/commit/d15073ee2c4639c3005bec37ea165221987ad617))
+
+
+### Features
+
+* **issues:** wave h — due dates ([#34](https://github.com/Promaly/core/issues/34)) ([a2ac53e](https://github.com/Promaly/core/commit/a2ac53e319e0fd91845facba0bcf4fc396af144a))
+* **web:** wave g — add notification preference hooks to admin data ([2a5dc70](https://github.com/Promaly/core/commit/2a5dc701dd54040e437bf2503637bf33a9e244d7))
+
 # [0.15.0](https://github.com/Promaly/core/compare/v0.14.0...v0.15.0) (2026-09-02)
 
 
