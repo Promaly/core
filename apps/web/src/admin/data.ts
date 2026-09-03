@@ -4,6 +4,7 @@ import type {
   Invitation,
   Label,
   Member,
+  NotificationPreferences,
   Project,
   Team,
   TeamMember,
@@ -315,4 +316,27 @@ export function useLeaveWorkspace() {
 }
 
 // Re-export types used by screens
-export type { Member, Invitation, Team, TeamMember, Workflow, Label, Project, CoreRole };
+export type { Member, Invitation, Team, TeamMember, Workflow, Label, Project, CoreRole, NotificationPreferences };
+
+// ── Notification preferences ──────────────────────────────────────────────────
+
+export function useNotificationPreferences() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  return useQuery({
+    queryKey: ['ws', ws, 'notif-prefs'] as const,
+    queryFn: () => client!.getNotificationPreferences(),
+    enabled: Boolean(client),
+  });
+}
+
+export function useUpdateNotificationPreferences() {
+  const ws = useWorkspaceId() ?? '';
+  const client = useWorkspaceApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<NotificationPreferences>) =>
+      client!.updateNotificationPreferences(patch),
+    onSuccess: (data) => qc.setQueryData(['ws', ws, 'notif-prefs'] as const, data),
+  });
+}
