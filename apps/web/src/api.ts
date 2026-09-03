@@ -40,7 +40,11 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   if (options.csrf) headers.set('x-csrf-token', await getCsrfToken());
   if (options.workspaceId) headers.set('x-workspace-id', options.workspaceId);
   if (options.ifMatch !== undefined) headers.set('if-match', String(options.ifMatch));
-  const init: RequestInit = { method: options.method ?? 'GET', headers, credentials: 'include' };
+  const init: RequestInit = {
+    method: options.method ?? 'GET',
+    headers,
+    credentials: 'include',
+  };
   if (options.signal) init.signal = options.signal;
   if (options.body !== undefined) {
     headers.set('content-type', 'application/json');
@@ -48,7 +52,9 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
   const response = await fetch(path, init);
   if (!response.ok) {
-    const detail = (await response.json().catch(() => ({}))) as { error?: string };
+    const detail = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
     throw new ApiError(detail.error ?? `Request failed (${response.status}).`, response.status);
   }
   return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
@@ -57,7 +63,11 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 export const authApi = {
   session: () => api<Session>('/v1/auth/me'),
   login: (email: string, password: string) =>
-    api<Session>('/v1/auth/login', { method: 'POST', body: { email, password }, csrf: true }),
+    api<Session>('/v1/auth/login', {
+      method: 'POST',
+      body: { email, password },
+      csrf: true,
+    }),
   register: (email: string, password: string, workspaceName: string) =>
     api<Session>('/v1/auth/register', {
       method: 'POST',
@@ -66,7 +76,11 @@ export const authApi = {
     }),
   logout: () => api<void>('/v1/auth/logout', { method: 'POST', csrf: true }),
   requestReset: (email: string) =>
-    api<void>('/v1/auth/password-reset', { method: 'POST', body: { email }, csrf: true }),
+    api<void>('/v1/auth/password-reset', {
+      method: 'POST',
+      body: { email },
+      csrf: true,
+    }),
   confirmReset: (token: string, password: string) =>
     api<void>(`/v1/auth/password-reset/${token}`, {
       method: 'POST',
@@ -125,11 +139,26 @@ export type WorkflowState = {
   color: string;
 };
 
-export type Workflow = { id: string; name: string; isDefault: boolean; states: WorkflowState[] };
+export type Workflow = {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  states: WorkflowState[];
+};
 
-export type Label = { id: string; name: string; color: string; projectId: string | null };
+export type Label = {
+  id: string;
+  name: string;
+  color: string;
+  projectId: string | null;
+};
 
-export type Member = { accountId: string; email: string; role: string; joinedAt: string };
+export type Member = {
+  accountId: string;
+  email: string;
+  role: string;
+  joinedAt: string;
+};
 
 export type Invitation = {
   id: string;
@@ -140,7 +169,12 @@ export type Invitation = {
   createdAt: string;
 };
 
-export type Team = { id: string; name: string; key: string; memberCount: number };
+export type Team = {
+  id: string;
+  name: string;
+  key: string;
+  memberCount: number;
+};
 
 export type TeamMember = { accountId: string; email: string; joinedAt: string };
 
@@ -165,6 +199,7 @@ export type Issue = {
   completedAt: string | null;
   archivedAt: string | null;
   dueAt: string | null;
+  estimate: number | null;
   labels: IssueLabelRef[];
 };
 
@@ -211,6 +246,7 @@ export type IssuePatch = {
   assigneeId?: string | null;
   parentIssueId?: string | null;
   dueAt?: string | null;
+  estimate?: number | null;
   labelIds?: string[];
 };
 
@@ -223,7 +259,9 @@ export type BulkItem = {
   labelIds?: string[];
 };
 
-export type BulkResult = { results: { id: string; ok: boolean; reason?: string }[] };
+export type BulkResult = {
+  results: { id: string; ok: boolean; reason?: string }[];
+};
 
 // Wave-A types (routes not yet implemented — shapes reserved for those screens)
 
@@ -340,17 +378,30 @@ export function workspaceApi(workspaceId: string) {
         csrf: true,
       }),
     deleteWorkspace: () =>
-      scoped<void>(`/v1/workspaces/${workspaceId}`, { method: 'DELETE', csrf: true }),
+      scoped<void>(`/v1/workspaces/${workspaceId}`, {
+        method: 'DELETE',
+        csrf: true,
+      }),
     leaveWorkspace: () =>
-      scoped<void>(`/v1/workspaces/${workspaceId}/leave`, { method: 'POST', csrf: true }),
+      scoped<void>(`/v1/workspaces/${workspaceId}/leave`, {
+        method: 'POST',
+        csrf: true,
+      }),
 
     // --- Members ------------------------------------------------------------
 
     listMembers: () => scoped<Member[]>('/v1/members'),
     updateMemberRole: (accountId: string, role: CoreRole) =>
-      scoped<void>(`/v1/members/${accountId}`, { method: 'PATCH', body: { role }, csrf: true }),
+      scoped<void>(`/v1/members/${accountId}`, {
+        method: 'PATCH',
+        body: { role },
+        csrf: true,
+      }),
     removeMember: (accountId: string) =>
-      scoped<void>(`/v1/members/${accountId}`, { method: 'DELETE', csrf: true }),
+      scoped<void>(`/v1/members/${accountId}`, {
+        method: 'DELETE',
+        csrf: true,
+      }),
 
     // --- Invitations --------------------------------------------------------
 
@@ -372,7 +423,11 @@ export function workspaceApi(workspaceId: string) {
     createTeam: (body: { name: string; key: string }) =>
       scoped<Team>('/v1/teams', { method: 'POST', body, csrf: true }),
     updateTeam: (id: string, patch: { name?: string; key?: string }) =>
-      scoped<Team>(`/v1/teams/${id}`, { method: 'PATCH', body: patch, csrf: true }),
+      scoped<Team>(`/v1/teams/${id}`, {
+        method: 'PATCH',
+        body: patch,
+        csrf: true,
+      }),
     deleteTeam: (id: string) => scoped<void>(`/v1/teams/${id}`, { method: 'DELETE', csrf: true }),
     listTeamMembers: (teamId: string) => scoped<TeamMember[]>(`/v1/teams/${teamId}/members`),
     addTeamMember: (teamId: string, accountId: string) =>
@@ -394,7 +449,11 @@ export function workspaceApi(workspaceId: string) {
     createWorkflow: (body: { name: string; isDefault?: boolean }) =>
       scoped<Workflow>('/v1/workflows', { method: 'POST', body, csrf: true }),
     updateWorkflow: (id: string, patch: { name?: string; isDefault?: boolean }) =>
-      scoped<Workflow>(`/v1/workflows/${id}`, { method: 'PATCH', body: patch, csrf: true }),
+      scoped<Workflow>(`/v1/workflows/${id}`, {
+        method: 'PATCH',
+        body: patch,
+        csrf: true,
+      }),
     createWorkflowState: (
       workflowId: string,
       body: { name: string; category: StateCategory; color: string },
@@ -432,7 +491,11 @@ export function workspaceApi(workspaceId: string) {
     createLabel: (body: { name: string; color: string; projectId?: string }) =>
       scoped<Label>('/v1/labels', { method: 'POST', body, csrf: true }),
     updateLabel: (id: string, patch: { name?: string; color?: string }) =>
-      scoped<Label>(`/v1/labels/${id}`, { method: 'PATCH', body: patch, csrf: true }),
+      scoped<Label>(`/v1/labels/${id}`, {
+        method: 'PATCH',
+        body: patch,
+        csrf: true,
+      }),
     deleteLabel: (id: string) => scoped<void>(`/v1/labels/${id}`, { method: 'DELETE', csrf: true }),
 
     // --- Projects -----------------------------------------------------------
@@ -459,11 +522,22 @@ export function workspaceApi(workspaceId: string) {
         icon?: string | null;
         color?: string | null;
       },
-    ) => scoped<Project>(`/v1/projects/${id}`, { method: 'PATCH', body: patch, csrf: true }),
+    ) =>
+      scoped<Project>(`/v1/projects/${id}`, {
+        method: 'PATCH',
+        body: patch,
+        csrf: true,
+      }),
     archiveProject: (id: string) =>
-      scoped<Project>(`/v1/projects/${id}/archive`, { method: 'POST', csrf: true }),
+      scoped<Project>(`/v1/projects/${id}/archive`, {
+        method: 'POST',
+        csrf: true,
+      }),
     unarchiveProject: (id: string) =>
-      scoped<Project>(`/v1/projects/${id}/unarchive`, { method: 'POST', csrf: true }),
+      scoped<Project>(`/v1/projects/${id}/unarchive`, {
+        method: 'POST',
+        csrf: true,
+      }),
 
     // --- Issues -------------------------------------------------------------
 
@@ -494,7 +568,11 @@ export function workspaceApi(workspaceId: string) {
         ifMatch: revision,
       }),
     bulkUpdate: (issues: BulkItem[]) =>
-      scoped<BulkResult>('/v1/issues/bulk', { method: 'POST', body: { issues }, csrf: true }),
+      scoped<BulkResult>('/v1/issues/bulk', {
+        method: 'POST',
+        body: { issues },
+        csrf: true,
+      }),
 
     // --- Relations ----------------------------------------------------------
 
@@ -509,7 +587,10 @@ export function workspaceApi(workspaceId: string) {
         csrf: true,
       }),
     deleteRelation: (relationId: string) =>
-      scoped<void>(`/v1/relations/${relationId}`, { method: 'DELETE', csrf: true }),
+      scoped<void>(`/v1/relations/${relationId}`, {
+        method: 'DELETE',
+        csrf: true,
+      }),
 
     // --- Comments (Wave A) --------------------------------------------------
 
@@ -522,7 +603,11 @@ export function workspaceApi(workspaceId: string) {
         csrf: true,
       }),
     updateComment: (id: string, patch: { body: string }) =>
-      scoped<Comment>(`/v1/comments/${id}`, { method: 'PATCH', body: patch, csrf: true }),
+      scoped<Comment>(`/v1/comments/${id}`, {
+        method: 'PATCH',
+        body: patch,
+        csrf: true,
+      }),
     deleteComment: (id: string) =>
       scoped<void>(`/v1/comments/${id}`, { method: 'DELETE', csrf: true }),
 
@@ -544,9 +629,15 @@ export function workspaceApi(workspaceId: string) {
     },
     getUnreadCount: () => scoped<{ count: number }>('/v1/notifications/unread-count'),
     markNotificationRead: (id: string) =>
-      scoped<void>(`/v1/notifications/${id}/read`, { method: 'POST', csrf: true }),
+      scoped<void>(`/v1/notifications/${id}/read`, {
+        method: 'POST',
+        csrf: true,
+      }),
     markAllNotificationsRead: () =>
-      scoped<void>('/v1/notifications/read-all', { method: 'POST', csrf: true }),
+      scoped<void>('/v1/notifications/read-all', {
+        method: 'POST',
+        csrf: true,
+      }),
     getNotificationPreferences: () =>
       scoped<NotificationPreferences>('/v1/notification-preferences'),
     updateNotificationPreferences: (patch: Partial<NotificationPreferences>) =>
@@ -575,7 +666,12 @@ export function workspaceApi(workspaceId: string) {
       filters: SavedViewFilters;
       groupBy?: string;
       sort?: string;
-    }) => scoped<SavedView>('/v1/saved-views', { method: 'POST', body, csrf: true }),
+    }) =>
+      scoped<SavedView>('/v1/saved-views', {
+        method: 'POST',
+        body,
+        csrf: true,
+      }),
     updateSavedView: (
       id: string,
       patch: {
@@ -584,7 +680,12 @@ export function workspaceApi(workspaceId: string) {
         groupBy?: string | null;
         sort?: string | null;
       },
-    ) => scoped<SavedView>(`/v1/saved-views/${id}`, { method: 'PATCH', body: patch, csrf: true }),
+    ) =>
+      scoped<SavedView>(`/v1/saved-views/${id}`, {
+        method: 'PATCH',
+        body: patch,
+        csrf: true,
+      }),
     deleteSavedView: (id: string) =>
       scoped<void>(`/v1/saved-views/${id}`, { method: 'DELETE', csrf: true }),
   };

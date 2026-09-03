@@ -45,6 +45,7 @@ type IssuePatch = {
   assigneeId?: string | null | undefined;
   parentIssueId?: string | null | undefined;
   dueAt?: string | null | undefined;
+  estimate?: number | null | undefined;
   labelIds?: string[] | undefined;
 };
 type ListSort = 'manual' | 'priority' | 'updated' | 'created';
@@ -280,7 +281,12 @@ async function recordActivity(
 async function issueWithLabels(tx: DbTransaction, workspaceId: string, issueId: string) {
   const issue = await findIssue(tx, workspaceId, issueId);
   const assignedLabels = await tx
-    .select({ id: labels.id, name: labels.name, color: labels.color, projectId: labels.projectId })
+    .select({
+      id: labels.id,
+      name: labels.name,
+      color: labels.color,
+      projectId: labels.projectId,
+    })
     .from(issueLabels)
     .innerJoin(labels, eq(labels.id, issueLabels.labelId))
     .where(eq(issueLabels.issueId, issueId));
@@ -332,6 +338,7 @@ export function createIssuesService(database: DatabaseClient) {
       assigneeId?: string | null | undefined;
       parentIssueId?: string | null | undefined;
       dueAt?: string | null | undefined;
+      estimate?: number | null | undefined;
       labelIds?: string[] | undefined;
     },
     metadata: Metadata,
@@ -371,6 +378,7 @@ export function createIssuesService(database: DatabaseClient) {
           startedAt: state.category === 'started' ? new Date() : null,
           completedAt: state.category === 'completed' ? new Date() : null,
           dueAt: input.dueAt ? new Date(input.dueAt) : null,
+          estimate: input.estimate ?? null,
         })
         .returning();
       if (input.labelIds) await replaceLabels(tx, id, input.labelIds);
@@ -413,6 +421,7 @@ export function createIssuesService(database: DatabaseClient) {
         'assigneeId',
         'parentIssueId',
         'dueAt',
+        'estimate',
       ] as const) {
         if (input[key] !== undefined && input[key] !== current[key]) changes[key] = input[key];
       }
@@ -428,6 +437,7 @@ export function createIssuesService(database: DatabaseClient) {
           parentIssueId: input.parentIssueId,
           dueAt:
             input.dueAt !== undefined ? (input.dueAt ? new Date(input.dueAt) : null) : undefined,
+          estimate: input.estimate !== undefined ? (input.estimate ?? null) : undefined,
           revision: current.revision + 1,
           ...(state ? stateTimestamps(state.category, current) : {}),
         })
@@ -567,7 +577,11 @@ export function createIssuesService(database: DatabaseClient) {
         ...issue,
         labels: assigned
           .filter((label) => label.issueId === issue.id)
-          .map((label) => ({ id: label.id, name: label.name, color: label.color })),
+          .map((label) => ({
+            id: label.id,
+            name: label.name,
+            color: label.color,
+          })),
       }));
       const groupCounts = items.reduce<Record<string, number>>((counts, issue) => {
         const key =
@@ -626,7 +640,10 @@ export function createIssuesService(database: DatabaseClient) {
         )
         .orderBy(asc(issues.sortKey))
         .limit(limit);
-      return { items: rows, nextCursor: rows.length === limit ? (rows.at(-1)?.id ?? null) : null };
+      return {
+        items: rows,
+        nextCursor: rows.length === limit ? (rows.at(-1)?.id ?? null) : null,
+      };
     },
 
     async createRelation(
@@ -685,7 +702,11 @@ export function createIssuesService(database: DatabaseClient) {
           issueId: relation.sourceIssueId,
           actorId,
           type: 'issue.relation_deleted',
-          data: { relationId, targetId: relation.targetIssueId, type: relation.type },
+          data: {
+            relationId,
+            targetId: relation.targetIssueId,
+            type: relation.type,
+          },
           eventType: 'issue.relation.deleted',
         });
       });
@@ -799,7 +820,11 @@ export function createIssuesService(database: DatabaseClient) {
           issueId,
           actorId,
           type: 'issue.moved',
-          data: { stateId: targetStateId, beforeId: input.beforeId, afterId: input.afterId },
+          data: {
+            stateId: targetStateId,
+            beforeId: input.beforeId,
+            afterId: input.afterId,
+          },
           eventType: 'issue.moved',
         });
         return updated[0];
