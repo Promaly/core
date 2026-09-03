@@ -164,6 +164,7 @@ export type Issue = {
   startedAt: string | null;
   completedAt: string | null;
   archivedAt: string | null;
+  dueAt: string | null;
   labels: IssueLabelRef[];
 };
 
@@ -209,6 +210,7 @@ export type IssuePatch = {
   priority?: number;
   assigneeId?: string | null;
   parentIssueId?: string | null;
+  dueAt?: string | null;
   labelIds?: string[];
 };
 
