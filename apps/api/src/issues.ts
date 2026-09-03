@@ -1,4 +1,17 @@
-import {and, asc, desc, eq, gt, gte, ilike, inArray, isNull, or, sql, type SQL} from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import {
   activityEvents,
   emit,
@@ -14,11 +27,16 @@ import {
   workflowStates,
   workspaceMembers,
 } from '@promaly/db';
-import {initialIssueSortKey, newId, rebalanceIssueSortKeys, sortKeyBetween} from '@promaly/domain';
-import {ConflictError} from './identity.js';
-import {TenancyNotFoundError} from './tenancy.js';
+import {
+  initialIssueSortKey,
+  newId,
+  rebalanceIssueSortKeys,
+  sortKeyBetween,
+} from '@promaly/domain';
+import { ConflictError } from './identity.js';
+import { TenancyNotFoundError } from './tenancy.js';
 
-type Metadata = {ipAddress?: string | undefined};
+type Metadata = { ipAddress?: string | undefined };
 type IssuePatch = {
   title?: string | undefined;
   description?: string | undefined;
@@ -129,10 +147,10 @@ type StateCategory = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancel
  */
 function stateTimestamps(
   category: StateCategory,
-  current: {startedAt: Date | null; completedAt: Date | null},
+  current: { startedAt: Date | null; completedAt: Date | null },
 ) {
   const now = new Date();
-  const patch: {startedAt?: Date | null; completedAt?: Date | null} = {};
+  const patch: { startedAt?: Date | null; completedAt?: Date | null } = {};
   if ((category === 'started' || category === 'completed') && current.startedAt === null) {
     patch.startedAt = now;
   }
@@ -152,7 +170,7 @@ async function validateMember(
   if (!accountId) return;
   const membership = (
     await tx
-      .select({id: workspaceMembers.accountId})
+      .select({ id: workspaceMembers.accountId })
       .from(workspaceMembers)
       .where(
         and(
@@ -187,7 +205,7 @@ async function validateParent(
     seen.add(ancestor);
     const next = (
       await tx
-        .select({parentIssueId: issues.parentIssueId})
+        .select({ parentIssueId: issues.parentIssueId })
         .from(issues)
         .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, ancestor)))
         .limit(1)
@@ -206,7 +224,7 @@ async function validateLabels(
   if (new Set(labelIds).size !== labelIds.length)
     throw new ConflictError('Duplicate labels are not allowed.');
   const found = await tx
-    .select({id: labels.id, projectId: labels.projectId})
+    .select({ id: labels.id, projectId: labels.projectId })
     .from(labels)
     .where(and(eq(labels.workspaceId, workspaceId), inArray(labels.id, labelIds)));
   if (
@@ -220,7 +238,7 @@ async function validateLabels(
 async function replaceLabels(tx: DbTransaction, issueId: string, labelIds: string[]) {
   await tx.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
   if (labelIds.length) {
-    await tx.insert(issueLabels).values(labelIds.map((labelId) => ({issueId, labelId})));
+    await tx.insert(issueLabels).values(labelIds.map((labelId) => ({ issueId, labelId })));
   }
 }
 
@@ -262,11 +280,11 @@ async function recordActivity(
 async function issueWithLabels(tx: DbTransaction, workspaceId: string, issueId: string) {
   const issue = await findIssue(tx, workspaceId, issueId);
   const assignedLabels = await tx
-    .select({id: labels.id, name: labels.name, color: labels.color, projectId: labels.projectId})
+    .select({ id: labels.id, name: labels.name, color: labels.color, projectId: labels.projectId })
     .from(issueLabels)
     .innerJoin(labels, eq(labels.id, issueLabels.labelId))
     .where(eq(issueLabels.issueId, issueId));
-  return {...issue, labels: assignedLabels};
+  return { ...issue, labels: assignedLabels };
 }
 
 async function reachesSource(
@@ -283,7 +301,7 @@ async function reachesSource(
     current.forEach((id) => visited.add(id));
     if (!current.length) return false;
     const edges = await tx
-      .select({targetId: issueRelations.targetIssueId})
+      .select({ targetId: issueRelations.targetIssueId })
       .from(issueRelations)
       .where(
         and(
@@ -300,7 +318,7 @@ async function reachesSource(
 export type IssuesService = ReturnType<typeof createIssuesService>;
 
 export function createIssuesService(database: DatabaseClient) {
-  const {db} = database;
+  const { db } = database;
 
   async function createIssue(
     workspaceId: string,
@@ -330,9 +348,9 @@ export function createIssuesService(database: DatabaseClient) {
 
       const counter = await tx
         .update(projectIssueCounters)
-        .set({nextNumber: sql`${projectIssueCounters.nextNumber} + 1`})
+        .set({ nextNumber: sql`${projectIssueCounters.nextNumber} + 1` })
         .where(eq(projectIssueCounters.projectId, project.id))
-        .returning({nextNumber: projectIssueCounters.nextNumber});
+        .returning({ nextNumber: projectIssueCounters.nextNumber });
       const number = (counter[0]?.nextNumber ?? 1) - 1;
       const id = newId();
       await tx
@@ -361,7 +379,7 @@ export function createIssuesService(database: DatabaseClient) {
         issueId: id,
         actorId,
         type: 'issue.created',
-        data: {projectId: project.id, number, stateId: state.id},
+        data: { projectId: project.id, number, stateId: state.id },
         eventType: 'issue.created',
       });
       return issueWithLabels(tx, workspaceId, id);
@@ -450,7 +468,7 @@ export function createIssuesService(database: DatabaseClient) {
           throw new RevisionConflictError('Issue revision does not match.');
         const updated = await tx
           .update(issues)
-          .set({archivedAt: new Date(), revision: revision + 1})
+          .set({ archivedAt: new Date(), revision: revision + 1 })
           .where(
             and(
               eq(issues.workspaceId, workspaceId),
@@ -549,7 +567,7 @@ export function createIssuesService(database: DatabaseClient) {
         ...issue,
         labels: assigned
           .filter((label) => label.issueId === issue.id)
-          .map((label) => ({id: label.id, name: label.name, color: label.color})),
+          .map((label) => ({ id: label.id, name: label.name, color: label.color })),
       }));
       const groupCounts = items.reduce<Record<string, number>>((counts, issue) => {
         const key =
@@ -586,7 +604,7 @@ export function createIssuesService(database: DatabaseClient) {
         return createIssue(
           workspaceId,
           actorId,
-          {...input, projectId: parent.projectId, parentIssueId: parentId},
+          { ...input, projectId: parent.projectId, parentIssueId: parentId },
           metadata,
         );
       });
@@ -608,7 +626,7 @@ export function createIssuesService(database: DatabaseClient) {
         )
         .orderBy(asc(issues.sortKey))
         .limit(limit);
-      return {items: rows, nextCursor: rows.length === limit ? (rows.at(-1)?.id ?? null) : null};
+      return { items: rows, nextCursor: rows.length === limit ? (rows.at(-1)?.id ?? null) : null };
     },
 
     async createRelation(
@@ -640,7 +658,7 @@ export function createIssuesService(database: DatabaseClient) {
             issueId: sourceId,
             actorId,
             type: 'issue.relation_created',
-            data: {relationId: id, targetId, type},
+            data: { relationId: id, targetId, type },
             eventType: 'issue.relation.created',
           });
         });
@@ -648,7 +666,7 @@ export function createIssuesService(database: DatabaseClient) {
         if (isUniqueViolation(error)) throw new ConflictError('This relation already exists.');
         throw error;
       }
-      return {id, sourceIssueId: sourceId, targetIssueId: targetId, type};
+      return { id, sourceIssueId: sourceId, targetIssueId: targetId, type };
     },
 
     async deleteRelation(workspaceId: string, actorId: string, relationId: string) {
@@ -667,7 +685,7 @@ export function createIssuesService(database: DatabaseClient) {
           issueId: relation.sourceIssueId,
           actorId,
           type: 'issue.relation_deleted',
-          data: {relationId, targetId: relation.targetIssueId, type: relation.type},
+          data: { relationId, targetId: relation.targetIssueId, type: relation.type },
           eventType: 'issue.relation.deleted',
         });
       });
@@ -676,16 +694,16 @@ export function createIssuesService(database: DatabaseClient) {
     async bulkUpdate(
       workspaceId: string,
       actorId: string,
-      updates: Array<{id: string; revision: number} & IssuePatch>,
+      updates: Array<{ id: string; revision: number } & IssuePatch>,
     ) {
       // Each item is its own transaction; a failure is reported per item rather
       // than aborting the whole batch (callers reconcile with the returned map).
       const results = [];
       for (const update of updates) {
-        const {id, revision, ...input} = update;
+        const { id, revision, ...input } = update;
         try {
           const issue = await updateIssue(workspaceId, actorId, id, revision, input);
-          results.push({id, ok: true as const, issue});
+          results.push({ id, ok: true as const, issue });
         } catch (error) {
           const reason =
             error instanceof RevisionConflictError
@@ -696,7 +714,7 @@ export function createIssuesService(database: DatabaseClient) {
                   ? 'conflict'
                   : 'error';
           if (reason === 'error') throw error;
-          results.push({id, ok: false as const, reason});
+          results.push({ id, ok: false as const, reason });
         }
       }
       return results;
@@ -750,7 +768,7 @@ export function createIssuesService(database: DatabaseClient) {
           const ranks = rebalanceIssueSortKeys(siblings.map((candidate) => candidate.id));
           await Promise.all(
             [...ranks].map(([id, sortKey]) =>
-              tx.update(issues).set({sortKey}).where(eq(issues.id, id)),
+              tx.update(issues).set({ sortKey }).where(eq(issues.id, id)),
             ),
           );
           key =
@@ -781,7 +799,7 @@ export function createIssuesService(database: DatabaseClient) {
           issueId,
           actorId,
           type: 'issue.moved',
-          data: {stateId: targetStateId, beforeId: input.beforeId, afterId: input.afterId},
+          data: { stateId: targetStateId, beforeId: input.beforeId, afterId: input.afterId },
           eventType: 'issue.moved',
         });
         return updated[0];
