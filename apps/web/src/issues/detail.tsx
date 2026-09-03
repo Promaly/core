@@ -455,6 +455,9 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
             </div>
           )}
         </Property>
+        <Property label="Due date">
+          <DueDatePicker issue={issue} onPick={(dueAt) => patch({ dueAt })} />
+        </Property>
         <Property label="Revision">
           <span className="font-mono text-faint">r{issue.revision}</span>
         </Property>
@@ -467,6 +470,28 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
         parentIssueId={issue.id}
       />
     </div>
+  );
+}
+
+function DueDatePicker({
+  issue,
+  onPick,
+}: {
+  issue: { id: string; dueAt: string | null };
+  onPick: (dueAt: string | null) => void;
+}) {
+  const value = issue.dueAt ? issue.dueAt.slice(0, 10) : '';
+  const isOverdue = issue.dueAt && new Date(issue.dueAt) < new Date() && issue.dueAt.slice(0, 10) !== new Date().toISOString().slice(0, 10);
+  return (
+    <input
+      type="date"
+      value={value}
+      onChange={(e) => onPick(e.currentTarget.value || null)}
+      className={[
+        'h-8 rounded-md border border-border bg-background px-2 text-[13px] text-foreground w-full',
+        isOverdue ? 'text-destructive border-destructive/50' : '',
+      ].join(' ')}
+    />
   );
 }
 
