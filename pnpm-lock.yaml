@@ -232,6 +232,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(pg@8.23.0)(postgres@3.4.9)
+      uuidv7:
+        specifier: ^1.2.1
+        version: 1.2.1
     devDependencies:
       '@testcontainers/postgresql':
         specifier: ^12.1.0
@@ -242,9 +245,6 @@ importers:
       tsx:
         specifier: ^4.20.5
         version: 4.23.12
-      uuidv7:
-        specifier: ^1.2.1
-        version: 1.2.1
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.12)(yaml@2.9.0)
