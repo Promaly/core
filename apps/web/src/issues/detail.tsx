@@ -458,6 +458,9 @@ export function IssueDetailScreen({ issueId }: { issueId: string }) {
         <Property label="Due date">
           <DueDatePicker issue={issue} onPick={(dueAt) => patch({ dueAt })} />
         </Property>
+        <Property label="Estimate">
+          <EstimatePicker issue={issue} onPick={(estimate) => patch({ estimate })} />
+        </Property>
         <Property label="Revision">
           <span className="font-mono text-faint">r{issue.revision}</span>
         </Property>
@@ -495,6 +498,36 @@ function DueDatePicker({
         isOverdue ? 'text-destructive border-destructive/50' : '',
       ].join(' ')}
     />
+  );
+}
+
+const ESTIMATES = [1, 2, 3, 5, 8, 13, 21];
+
+function EstimatePicker({
+  issue,
+  onPick,
+}: {
+  issue: { id: string; estimate: number | null };
+  onPick: (estimate: number | null) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {ESTIMATES.map((pt) => (
+        <button
+          key={pt}
+          type="button"
+          onClick={() => onPick(issue.estimate === pt ? null : pt)}
+          className={[
+            'h-7 min-w-[28px] rounded px-1.5 text-[12px] font-medium transition-colors',
+            issue.estimate === pt
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+          ].join(' ')}
+        >
+          {pt}
+        </button>
+      ))}
+    </div>
   );
 }
 
