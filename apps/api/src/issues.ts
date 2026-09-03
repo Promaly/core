@@ -11,7 +11,7 @@ import {
   or,
   sql,
   type SQL,
-} from 'drizzle-orm';
+} from "drizzle-orm";
 import {
   activityEvents,
   emit,
@@ -26,15 +26,15 @@ import {
   type DbTransaction,
   workflowStates,
   workspaceMembers,
-} from '@promaly/db';
+} from "@promaly/db";
 import {
   initialIssueSortKey,
   newId,
   rebalanceIssueSortKeys,
   sortKeyBetween,
-} from '@promaly/domain';
-import { ConflictError } from './identity.js';
-import { TenancyNotFoundError } from './tenancy.js';
+} from "@promaly/domain";
+import { ConflictError } from "./identity.js";
+import { TenancyNotFoundError } from "./tenancy.js";
 
 type Metadata = { ipAddress?: string | undefined };
 type IssuePatch = {
@@ -45,9 +45,10 @@ type IssuePatch = {
   assigneeId?: string | null | undefined;
   parentIssueId?: string | null | undefined;
   dueAt?: string | null | undefined;
+  estimate?: number | null | undefined;
   labelIds?: string[] | undefined;
 };
-type ListSort = 'manual' | 'priority' | 'updated' | 'created';
+type ListSort = "manual" | "priority" | "updated" | "created";
 type OrderableRow = {
   sortKey: string;
   priority: number;
@@ -67,31 +68,37 @@ const SORT_COLUMN = {
 } as const;
 
 function sortValue(sort: ListSort, row: OrderableRow): string | number {
-  if (sort === 'manual') return row.sortKey;
-  if (sort === 'priority') return row.priority;
-  return (sort === 'updated' ? row.updatedAt : row.createdAt).toISOString();
+  if (sort === "manual") return row.sortKey;
+  if (sort === "priority") return row.priority;
+  return (sort === "updated" ? row.updatedAt : row.createdAt).toISOString();
 }
 
 function encodeIssueCursor(sort: ListSort, row: OrderableRow) {
-  return Buffer.from(JSON.stringify([sortValue(sort, row), row.id])).toString('base64url');
+  return Buffer.from(JSON.stringify([sortValue(sort, row), row.id])).toString(
+    "base64url",
+  );
 }
 
 /** Keyset predicate that matches the same (sortColumn, id) ordering the list uses. */
 function issueCursorPredicate(sort: ListSort, cursor: string): SQL | undefined {
   let parsed: [string | number, string];
   try {
-    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+    parsed = JSON.parse(Buffer.from(cursor, "base64url").toString());
   } catch {
     return undefined;
   }
   const [value, id] = parsed;
   const column = SORT_COLUMN[sort];
-  return sort === 'manual'
+  return sort === "manual"
     ? sql`(${column}, ${issues.id}) > (${value}, ${id})`
     : sql`(${column}, ${issues.id}) < (${value}, ${id})`;
 }
 
-async function findIssue(tx: DbTransaction, workspaceId: string, issueId: string) {
+async function findIssue(
+  tx: DbTransaction,
+  workspaceId: string,
+  issueId: string,
+) {
   const issue = (
     await tx
       .select()
@@ -99,31 +106,46 @@ async function findIssue(tx: DbTransaction, workspaceId: string, issueId: string
       .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, issueId)))
       .limit(1)
   )[0];
-  if (!issue) throw new TenancyNotFoundError('Issue not found.');
+  if (!issue) throw new TenancyNotFoundError("Issue not found.");
   return issue;
 }
 
-async function findProject(tx: DbTransaction, workspaceId: string, projectId: string) {
+async function findProject(
+  tx: DbTransaction,
+  workspaceId: string,
+  projectId: string,
+) {
   const project = (
     await tx
       .select()
       .from(projects)
-      .where(and(eq(projects.workspaceId, workspaceId), eq(projects.id, projectId)))
+      .where(
+        and(eq(projects.workspaceId, workspaceId), eq(projects.id, projectId)),
+      )
       .limit(1)
   )[0];
-  if (!project) throw new TenancyNotFoundError('Project not found.');
+  if (!project) throw new TenancyNotFoundError("Project not found.");
   return project;
 }
 
-async function validateState(tx: DbTransaction, workflowId: string, stateId: string) {
+async function validateState(
+  tx: DbTransaction,
+  workflowId: string,
+  stateId: string,
+) {
   const state = (
     await tx
       .select()
       .from(workflowStates)
-      .where(and(eq(workflowStates.workflowId, workflowId), eq(workflowStates.id, stateId)))
+      .where(
+        and(
+          eq(workflowStates.workflowId, workflowId),
+          eq(workflowStates.id, stateId),
+        ),
+      )
       .limit(1)
   )[0];
-  if (!state) throw new TenancyNotFoundError('Workflow state not found.');
+  if (!state) throw new TenancyNotFoundError("Workflow state not found.");
   return state;
 }
 
@@ -133,12 +155,14 @@ async function defaultState(tx: DbTransaction, workflowId: string) {
     .from(workflowStates)
     .where(eq(workflowStates.workflowId, workflowId))
     .orderBy(asc(workflowStates.position));
-  const state = states.find((candidate) => candidate.category === 'unstarted') ?? states[0];
-  if (!state) throw new TenancyNotFoundError('Workflow has no states.');
+  const state =
+    states.find((candidate) => candidate.category === "unstarted") ?? states[0];
+  if (!state) throw new TenancyNotFoundError("Workflow has no states.");
   return state;
 }
 
-type StateCategory = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
+type StateCategory =
+  "backlog" | "unstarted" | "started" | "completed" | "cancelled";
 
 /**
  * `started_at` is stamped once the issue first enters a started/completed state
@@ -151,10 +175,13 @@ function stateTimestamps(
 ) {
   const now = new Date();
   const patch: { startedAt?: Date | null; completedAt?: Date | null } = {};
-  if ((category === 'started' || category === 'completed') && current.startedAt === null) {
+  if (
+    (category === "started" || category === "completed") &&
+    current.startedAt === null
+  ) {
     patch.startedAt = now;
   }
-  if (category === 'completed') {
+  if (category === "completed") {
     if (current.completedAt === null) patch.completedAt = now;
   } else if (current.completedAt !== null) {
     patch.completedAt = null;
@@ -180,7 +207,8 @@ async function validateMember(
       )
       .limit(1)
   )[0];
-  if (!membership) throw new TenancyNotFoundError('Assignee is not a workspace member.');
+  if (!membership)
+    throw new TenancyNotFoundError("Assignee is not a workspace member.");
 }
 
 async function validateParent(
@@ -191,23 +219,27 @@ async function validateParent(
   parentId: string | null | undefined,
 ) {
   if (!parentId) return;
-  if (parentId === issueId) throw new ConflictError('An issue cannot be its own parent.');
+  if (parentId === issueId)
+    throw new ConflictError("An issue cannot be its own parent.");
   const parent = await findIssue(tx, workspaceId, parentId);
   if (parent.projectId !== projectId)
-    throw new ConflictError('A sub-issue must use the same project.');
+    throw new ConflictError("A sub-issue must use the same project.");
 
   // Walk the ancestor chain; reaching this issue would close a loop.
   const seen = new Set<string>([parentId]);
   let ancestor: string | null = parent.parentIssueId;
   while (ancestor) {
-    if (ancestor === issueId) throw new ConflictError('A sub-issue cannot create a parent cycle.');
+    if (ancestor === issueId)
+      throw new ConflictError("A sub-issue cannot create a parent cycle.");
     if (seen.has(ancestor)) break;
     seen.add(ancestor);
     const next = (
       await tx
         .select({ parentIssueId: issues.parentIssueId })
         .from(issues)
-        .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, ancestor)))
+        .where(
+          and(eq(issues.workspaceId, workspaceId), eq(issues.id, ancestor)),
+        )
         .limit(1)
     )[0];
     ancestor = next?.parentIssueId ?? null;
@@ -222,23 +254,33 @@ async function validateLabels(
 ) {
   if (!labelIds) return;
   if (new Set(labelIds).size !== labelIds.length)
-    throw new ConflictError('Duplicate labels are not allowed.');
+    throw new ConflictError("Duplicate labels are not allowed.");
   const found = await tx
     .select({ id: labels.id, projectId: labels.projectId })
     .from(labels)
-    .where(and(eq(labels.workspaceId, workspaceId), inArray(labels.id, labelIds)));
+    .where(
+      and(eq(labels.workspaceId, workspaceId), inArray(labels.id, labelIds)),
+    );
   if (
     found.length !== labelIds.length ||
-    found.some((label) => label.projectId !== null && label.projectId !== projectId)
+    found.some(
+      (label) => label.projectId !== null && label.projectId !== projectId,
+    )
   ) {
-    throw new TenancyNotFoundError('Label not found in this project scope.');
+    throw new TenancyNotFoundError("Label not found in this project scope.");
   }
 }
 
-async function replaceLabels(tx: DbTransaction, issueId: string, labelIds: string[]) {
+async function replaceLabels(
+  tx: DbTransaction,
+  issueId: string,
+  labelIds: string[],
+) {
   await tx.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
   if (labelIds.length) {
-    await tx.insert(issueLabels).values(labelIds.map((labelId) => ({ issueId, labelId })));
+    await tx
+      .insert(issueLabels)
+      .values(labelIds.map((labelId) => ({ issueId, labelId })));
   }
 }
 
@@ -251,12 +293,12 @@ async function recordActivity(
     type: string;
     data: Record<string, unknown>;
     eventType:
-      | 'issue.created'
-      | 'issue.updated'
-      | 'issue.archived'
-      | 'issue.moved'
-      | 'issue.relation.created'
-      | 'issue.relation.deleted';
+      | "issue.created"
+      | "issue.updated"
+      | "issue.archived"
+      | "issue.moved"
+      | "issue.relation.created"
+      | "issue.relation.deleted";
   },
 ) {
   await tx.insert(activityEvents).values({
@@ -270,17 +312,26 @@ async function recordActivity(
   await emit(tx, {
     id: newId(),
     workspaceId: input.workspaceId,
-    aggregateType: 'issue',
+    aggregateType: "issue",
     aggregateId: input.issueId,
     type: input.eventType,
     payload: input.data,
   });
 }
 
-async function issueWithLabels(tx: DbTransaction, workspaceId: string, issueId: string) {
+async function issueWithLabels(
+  tx: DbTransaction,
+  workspaceId: string,
+  issueId: string,
+) {
   const issue = await findIssue(tx, workspaceId, issueId);
   const assignedLabels = await tx
-    .select({ id: labels.id, name: labels.name, color: labels.color, projectId: labels.projectId })
+    .select({
+      id: labels.id,
+      name: labels.name,
+      color: labels.color,
+      projectId: labels.projectId,
+    })
     .from(issueLabels)
     .innerJoin(labels, eq(labels.id, issueLabels.labelId))
     .where(eq(issueLabels.issueId, issueId));
@@ -306,7 +357,7 @@ async function reachesSource(
       .where(
         and(
           eq(issueRelations.workspaceId, workspaceId),
-          eq(issueRelations.type, 'blocks'),
+          eq(issueRelations.type, "blocks"),
           inArray(issueRelations.sourceIssueId, current),
         ),
       );
@@ -332,6 +383,7 @@ export function createIssuesService(database: DatabaseClient) {
       assigneeId?: string | null | undefined;
       parentIssueId?: string | null | undefined;
       dueAt?: string | null | undefined;
+      estimate?: number | null | undefined;
       labelIds?: string[] | undefined;
     },
     metadata: Metadata,
@@ -343,7 +395,13 @@ export function createIssuesService(database: DatabaseClient) {
         ? await validateState(tx, project.workflowId, input.stateId)
         : await defaultState(tx, project.workflowId);
       await validateMember(tx, workspaceId, input.assigneeId);
-      await validateParent(tx, workspaceId, project.id, undefined, input.parentIssueId);
+      await validateParent(
+        tx,
+        workspaceId,
+        project.id,
+        undefined,
+        input.parentIssueId,
+      );
       await validateLabels(tx, workspaceId, project.id, input.labelIds);
 
       const counter = await tx
@@ -361,16 +419,17 @@ export function createIssuesService(database: DatabaseClient) {
           projectId: project.id,
           number,
           title: input.title.trim(),
-          description: input.description ?? '',
+          description: input.description ?? "",
           stateId: state.id,
           priority: input.priority ?? 0,
           assigneeId: input.assigneeId ?? null,
           parentIssueId: input.parentIssueId ?? null,
           sortKey: initialIssueSortKey(),
           createdBy: actorId,
-          startedAt: state.category === 'started' ? new Date() : null,
-          completedAt: state.category === 'completed' ? new Date() : null,
+          startedAt: state.category === "started" ? new Date() : null,
+          completedAt: state.category === "completed" ? new Date() : null,
           dueAt: input.dueAt ? new Date(input.dueAt) : null,
+          estimate: input.estimate ?? null,
         })
         .returning();
       if (input.labelIds) await replaceLabels(tx, id, input.labelIds);
@@ -378,9 +437,9 @@ export function createIssuesService(database: DatabaseClient) {
         workspaceId,
         issueId: id,
         actorId,
-        type: 'issue.created',
+        type: "issue.created",
         data: { projectId: project.id, number, stateId: state.id },
-        eventType: 'issue.created',
+        eventType: "issue.created",
       });
       return issueWithLabels(tx, workspaceId, id);
     });
@@ -396,25 +455,34 @@ export function createIssuesService(database: DatabaseClient) {
     return db.transaction(async (tx) => {
       const current = await findIssue(tx, workspaceId, issueId);
       if (current.revision !== revision)
-        throw new RevisionConflictError('Issue revision does not match.');
+        throw new RevisionConflictError("Issue revision does not match.");
       const project = await findProject(tx, workspaceId, current.projectId);
       const state = input.stateId
         ? await validateState(tx, project.workflowId, input.stateId)
         : undefined;
       await validateMember(tx, workspaceId, input.assigneeId);
-      await validateParent(tx, workspaceId, project.id, issueId, input.parentIssueId);
+      await validateParent(
+        tx,
+        workspaceId,
+        project.id,
+        issueId,
+        input.parentIssueId,
+      );
       await validateLabels(tx, workspaceId, project.id, input.labelIds);
       const changes: Record<string, unknown> = {};
       for (const key of [
-        'title',
-        'description',
-        'stateId',
-        'priority',
-        'assigneeId',
-        'parentIssueId',
-        'dueAt',
+        "title",
+        "description",
+        "stateId",
+        "priority",
+        "assigneeId",
+        "parentIssueId",
+        "dueAt",
+        ,
+        "estimate",
       ] as const) {
-        if (input[key] !== undefined && input[key] !== current[key]) changes[key] = input[key];
+        if (input[key] !== undefined && input[key] !== current[key])
+          changes[key] = input[key];
       }
       if (input.labelIds) changes.labelIds = input.labelIds;
       const updated = await tx
@@ -427,7 +495,13 @@ export function createIssuesService(database: DatabaseClient) {
           assigneeId: input.assigneeId,
           parentIssueId: input.parentIssueId,
           dueAt:
-            input.dueAt !== undefined ? (input.dueAt ? new Date(input.dueAt) : null) : undefined,
+            input.dueAt !== undefined
+              ? input.dueAt
+                ? new Date(input.dueAt)
+                : null
+              : undefined,
+          estimate:
+            input.estimate !== undefined ? (input.estimate ?? null) : undefined,
           revision: current.revision + 1,
           ...(state ? stateTimestamps(state.category, current) : {}),
         })
@@ -439,15 +513,16 @@ export function createIssuesService(database: DatabaseClient) {
           ),
         )
         .returning();
-      if (!updated[0]) throw new RevisionConflictError('Issue revision does not match.');
+      if (!updated[0])
+        throw new RevisionConflictError("Issue revision does not match.");
       if (input.labelIds) await replaceLabels(tx, issueId, input.labelIds);
       await recordActivity(tx, {
         workspaceId,
         issueId,
         actorId,
-        type: 'issue.updated',
+        type: "issue.updated",
         data: changes,
-        eventType: 'issue.updated',
+        eventType: "issue.updated",
       });
       return issueWithLabels(tx, workspaceId, issueId);
     });
@@ -461,11 +536,16 @@ export function createIssuesService(database: DatabaseClient) {
       return db.transaction((tx) => issueWithLabels(tx, workspaceId, issueId));
     },
 
-    async archiveIssue(workspaceId: string, actorId: string, issueId: string, revision: number) {
+    async archiveIssue(
+      workspaceId: string,
+      actorId: string,
+      issueId: string,
+      revision: number,
+    ) {
       return db.transaction(async (tx) => {
         const current = await findIssue(tx, workspaceId, issueId);
         if (current.revision !== revision)
-          throw new RevisionConflictError('Issue revision does not match.');
+          throw new RevisionConflictError("Issue revision does not match.");
         const updated = await tx
           .update(issues)
           .set({ archivedAt: new Date(), revision: revision + 1 })
@@ -477,14 +557,15 @@ export function createIssuesService(database: DatabaseClient) {
             ),
           )
           .returning();
-        if (!updated[0]) throw new RevisionConflictError('Issue revision does not match.');
+        if (!updated[0])
+          throw new RevisionConflictError("Issue revision does not match.");
         await recordActivity(tx, {
           workspaceId,
           issueId,
           actorId,
-          type: 'issue.archived',
+          type: "issue.archived",
           data: {},
-          eventType: 'issue.archived',
+          eventType: "issue.archived",
         });
         return updated[0];
       });
@@ -503,18 +584,26 @@ export function createIssuesService(database: DatabaseClient) {
         updatedSince?: Date | undefined;
         cursor?: string | undefined;
         limit: number;
-        sort: 'manual' | 'priority' | 'updated' | 'created';
-        groupBy: 'state' | 'assignee' | 'priority' | 'label' | 'none';
+        sort: "manual" | "priority" | "updated" | "created";
+        groupBy: "state" | "assignee" | "priority" | "label" | "none";
       },
     ) {
-      const predicates: SQL[] = [eq(issues.workspaceId, workspaceId), isNull(issues.archivedAt)];
-      if (options.projectId) predicates.push(eq(issues.projectId, options.projectId));
-      if (options.stateIds?.length) predicates.push(inArray(issues.stateId, options.stateIds));
+      const predicates: SQL[] = [
+        eq(issues.workspaceId, workspaceId),
+        isNull(issues.archivedAt),
+      ];
+      if (options.projectId)
+        predicates.push(eq(issues.projectId, options.projectId));
+      if (options.stateIds?.length)
+        predicates.push(inArray(issues.stateId, options.stateIds));
       if (options.assigneeIds?.length)
         predicates.push(inArray(issues.assigneeId, options.assigneeIds));
-      if (options.priorities?.length) predicates.push(inArray(issues.priority, options.priorities));
-      if (options.parentId) predicates.push(eq(issues.parentIssueId, options.parentId));
-      if (options.updatedSince) predicates.push(gte(issues.updatedAt, options.updatedSince));
+      if (options.priorities?.length)
+        predicates.push(inArray(issues.priority, options.priorities));
+      if (options.parentId)
+        predicates.push(eq(issues.parentIssueId, options.parentId));
+      if (options.updatedSince)
+        predicates.push(gte(issues.updatedAt, options.updatedSince));
       if (options.cursor) {
         const predicate = issueCursorPredicate(options.sort, options.cursor);
         if (predicate) predicates.push(predicate);
@@ -537,11 +626,11 @@ export function createIssuesService(database: DatabaseClient) {
         );
       }
       const order =
-        options.sort === 'manual'
+        options.sort === "manual"
           ? [asc(issues.sortKey), desc(issues.id)]
-          : options.sort === 'priority'
+          : options.sort === "priority"
             ? [desc(issues.priority), desc(issues.id)]
-            : options.sort === 'created'
+            : options.sort === "created"
               ? [desc(issues.createdAt), desc(issues.id)]
               : [desc(issues.updatedAt), desc(issues.id)];
       const rows = await db
@@ -567,27 +656,37 @@ export function createIssuesService(database: DatabaseClient) {
         ...issue,
         labels: assigned
           .filter((label) => label.issueId === issue.id)
-          .map((label) => ({ id: label.id, name: label.name, color: label.color })),
+          .map((label) => ({
+            id: label.id,
+            name: label.name,
+            color: label.color,
+          })),
       }));
-      const groupCounts = items.reduce<Record<string, number>>((counts, issue) => {
-        const key =
-          options.groupBy === 'state'
-            ? issue.stateId
-            : options.groupBy === 'assignee'
-              ? (issue.assigneeId ?? 'unassigned')
-              : options.groupBy === 'priority'
-                ? String(issue.priority)
-                : options.groupBy === 'label'
-                  ? issue.labels.map((label) => label.id).join(',') || 'unlabelled'
-                  : 'all';
-        counts[key] = (counts[key] ?? 0) + 1;
-        return counts;
-      }, {});
+      const groupCounts = items.reduce<Record<string, number>>(
+        (counts, issue) => {
+          const key =
+            options.groupBy === "state"
+              ? issue.stateId
+              : options.groupBy === "assignee"
+                ? (issue.assigneeId ?? "unassigned")
+                : options.groupBy === "priority"
+                  ? String(issue.priority)
+                  : options.groupBy === "label"
+                    ? issue.labels.map((label) => label.id).join(",") ||
+                      "unlabelled"
+                    : "all";
+          counts[key] = (counts[key] ?? 0) + 1;
+          return counts;
+        },
+        {},
+      );
       const last = rows.at(-1);
       return {
         items,
         nextCursor:
-          last && rows.length === options.limit ? encodeIssueCursor(options.sort, last) : null,
+          last && rows.length === options.limit
+            ? encodeIssueCursor(options.sort, last)
+            : null,
         groupCounts,
       };
     },
@@ -596,7 +695,10 @@ export function createIssuesService(database: DatabaseClient) {
       workspaceId: string,
       actorId: string,
       parentId: string,
-      input: Omit<Parameters<typeof createIssue>[2], 'projectId' | 'parentIssueId'>,
+      input: Omit<
+        Parameters<typeof createIssue>[2],
+        "projectId" | "parentIssueId"
+      >,
       metadata: Metadata,
     ) {
       return db.transaction(async (tx) => {
@@ -610,7 +712,12 @@ export function createIssuesService(database: DatabaseClient) {
       });
     },
 
-    async listSubIssues(workspaceId: string, parentId: string, cursor?: string, limit = 50) {
+    async listSubIssues(
+      workspaceId: string,
+      parentId: string,
+      cursor?: string,
+      limit = 50,
+    ) {
       await db.transaction((tx) => findIssue(tx, workspaceId, parentId));
       const rows = await db
         .select()
@@ -622,11 +729,17 @@ export function createIssuesService(database: DatabaseClient) {
                 eq(issues.parentIssueId, parentId),
                 gt(issues.id, cursor),
               )
-            : and(eq(issues.workspaceId, workspaceId), eq(issues.parentIssueId, parentId)),
+            : and(
+                eq(issues.workspaceId, workspaceId),
+                eq(issues.parentIssueId, parentId),
+              ),
         )
         .orderBy(asc(issues.sortKey))
         .limit(limit);
-      return { items: rows, nextCursor: rows.length === limit ? (rows.at(-1)?.id ?? null) : null };
+      return {
+        items: rows,
+        nextCursor: rows.length === limit ? (rows.at(-1)?.id ?? null) : null,
+      };
     },
 
     async createRelation(
@@ -634,16 +747,22 @@ export function createIssuesService(database: DatabaseClient) {
       actorId: string,
       sourceId: string,
       targetId: string,
-      type: 'blocks' | 'relates_to' | 'duplicates',
+      type: "blocks" | "relates_to" | "duplicates",
     ) {
-      if (sourceId === targetId) throw new IssueRelationError('An issue cannot relate to itself.');
+      if (sourceId === targetId)
+        throw new IssueRelationError("An issue cannot relate to itself.");
       const id = newId();
       try {
         await db.transaction(async (tx) => {
           await findIssue(tx, workspaceId, sourceId);
           await findIssue(tx, workspaceId, targetId);
-          if (type === 'blocks' && (await reachesSource(tx, workspaceId, sourceId, targetId))) {
-            throw new IssueRelationError('This blocks relation would create a cycle.');
+          if (
+            type === "blocks" &&
+            (await reachesSource(tx, workspaceId, sourceId, targetId))
+          ) {
+            throw new IssueRelationError(
+              "This blocks relation would create a cycle.",
+            );
           }
           await tx.insert(issueRelations).values({
             id,
@@ -657,36 +776,48 @@ export function createIssuesService(database: DatabaseClient) {
             workspaceId,
             issueId: sourceId,
             actorId,
-            type: 'issue.relation_created',
+            type: "issue.relation_created",
             data: { relationId: id, targetId, type },
-            eventType: 'issue.relation.created',
+            eventType: "issue.relation.created",
           });
         });
       } catch (error) {
-        if (isUniqueViolation(error)) throw new ConflictError('This relation already exists.');
+        if (isUniqueViolation(error))
+          throw new ConflictError("This relation already exists.");
         throw error;
       }
       return { id, sourceIssueId: sourceId, targetIssueId: targetId, type };
     },
 
-    async deleteRelation(workspaceId: string, actorId: string, relationId: string) {
+    async deleteRelation(
+      workspaceId: string,
+      actorId: string,
+      relationId: string,
+    ) {
       await db.transaction(async (tx) => {
         const relation = (
           await tx
             .delete(issueRelations)
             .where(
-              and(eq(issueRelations.workspaceId, workspaceId), eq(issueRelations.id, relationId)),
+              and(
+                eq(issueRelations.workspaceId, workspaceId),
+                eq(issueRelations.id, relationId),
+              ),
             )
             .returning()
         )[0];
-        if (!relation) throw new TenancyNotFoundError('Relation not found.');
+        if (!relation) throw new TenancyNotFoundError("Relation not found.");
         await recordActivity(tx, {
           workspaceId,
           issueId: relation.sourceIssueId,
           actorId,
-          type: 'issue.relation_deleted',
-          data: { relationId, targetId: relation.targetIssueId, type: relation.type },
-          eventType: 'issue.relation.deleted',
+          type: "issue.relation_deleted",
+          data: {
+            relationId,
+            targetId: relation.targetIssueId,
+            type: relation.type,
+          },
+          eventType: "issue.relation.deleted",
         });
       });
     },
@@ -702,18 +833,24 @@ export function createIssuesService(database: DatabaseClient) {
       for (const update of updates) {
         const { id, revision, ...input } = update;
         try {
-          const issue = await updateIssue(workspaceId, actorId, id, revision, input);
+          const issue = await updateIssue(
+            workspaceId,
+            actorId,
+            id,
+            revision,
+            input,
+          );
           results.push({ id, ok: true as const, issue });
         } catch (error) {
           const reason =
             error instanceof RevisionConflictError
-              ? 'revision_conflict'
+              ? "revision_conflict"
               : error instanceof TenancyNotFoundError
-                ? 'not_found'
+                ? "not_found"
                 : error instanceof ConflictError
-                  ? 'conflict'
-                  : 'error';
-          if (reason === 'error') throw error;
+                  ? "conflict"
+                  : "error";
+          if (reason === "error") throw error;
           results.push({ id, ok: false as const, reason });
         }
       }
@@ -734,10 +871,14 @@ export function createIssuesService(database: DatabaseClient) {
       return db.transaction(async (tx) => {
         const issue = await findIssue(tx, workspaceId, issueId);
         if (issue.revision !== revision)
-          throw new RevisionConflictError('Issue revision does not match.');
+          throw new RevisionConflictError("Issue revision does not match.");
         const project = await findProject(tx, workspaceId, issue.projectId);
         const targetStateId = input.stateId ?? issue.stateId;
-        const targetState = await validateState(tx, project.workflowId, targetStateId);
+        const targetState = await validateState(
+          tx,
+          project.workflowId,
+          targetStateId,
+        );
         const siblings = (
           await tx
             .select()
@@ -759,13 +900,15 @@ export function createIssuesService(database: DatabaseClient) {
           ? siblings.find((candidate) => candidate.id === input.afterId)
           : undefined;
         if ((input.beforeId && !before) || (input.afterId && !after))
-          throw new TenancyNotFoundError('Move neighbour not found.');
+          throw new TenancyNotFoundError("Move neighbour not found.");
         let key = sortKeyBetween(
           after?.sortKey,
           before?.sortKey ?? (input.beforeId ? undefined : null),
         );
         if (!key) {
-          const ranks = rebalanceIssueSortKeys(siblings.map((candidate) => candidate.id));
+          const ranks = rebalanceIssueSortKeys(
+            siblings.map((candidate) => candidate.id),
+          );
           await Promise.all(
             [...ranks].map(([id, sortKey]) =>
               tx.update(issues).set({ sortKey }).where(eq(issues.id, id)),
@@ -793,14 +936,19 @@ export function createIssuesService(database: DatabaseClient) {
             ),
           )
           .returning();
-        if (!updated[0]) throw new RevisionConflictError('Issue revision does not match.');
+        if (!updated[0])
+          throw new RevisionConflictError("Issue revision does not match.");
         await recordActivity(tx, {
           workspaceId,
           issueId,
           actorId,
-          type: 'issue.moved',
-          data: { stateId: targetStateId, beforeId: input.beforeId, afterId: input.afterId },
-          eventType: 'issue.moved',
+          type: "issue.moved",
+          data: {
+            stateId: targetStateId,
+            beforeId: input.beforeId,
+            afterId: input.afterId,
+          },
+          eventType: "issue.moved",
         });
         return updated[0];
       });
@@ -827,7 +975,9 @@ export function createIssuesService(database: DatabaseClient) {
           ),
         )
         .orderBy(
-          desc(sql`ts_rank_cd(${issues.searchTsv}, websearch_to_tsquery('english', ${query}))`),
+          desc(
+            sql`ts_rank_cd(${issues.searchTsv}, websearch_to_tsquery('english', ${query}))`,
+          ),
         )
         .limit(limit);
       return rows;
