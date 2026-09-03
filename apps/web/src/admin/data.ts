@@ -316,7 +316,17 @@ export function useLeaveWorkspace() {
 }
 
 // Re-export types used by screens
-export type { Member, Invitation, Team, TeamMember, Workflow, Label, Project, CoreRole, NotificationPreferences };
+export type {
+  Member,
+  Invitation,
+  Team,
+  TeamMember,
+  Workflow,
+  Label,
+  Project,
+  CoreRole,
+  NotificationPreferences,
+};
 
 // ── Notification preferences ──────────────────────────────────────────────────
 

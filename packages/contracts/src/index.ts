@@ -193,6 +193,7 @@ export const issueCreateRequestSchema = z.object({
   priority: issuePrioritySchema.optional(),
   assigneeId: z.uuid().nullable().optional(),
   parentIssueId: z.uuid().nullable().optional(),
+  dueAt: z.string().nullable().optional(),
   labelIds: z.array(z.uuid()).max(50).optional(),
 });
 export const issueUpdateRequestSchema = issueCreateRequestSchema

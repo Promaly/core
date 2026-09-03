@@ -44,6 +44,7 @@ type IssuePatch = {
   priority?: number | undefined;
   assigneeId?: string | null | undefined;
   parentIssueId?: string | null | undefined;
+  dueAt?: string | null | undefined;
   labelIds?: string[] | undefined;
 };
 type ListSort = 'manual' | 'priority' | 'updated' | 'created';
@@ -330,6 +331,7 @@ export function createIssuesService(database: DatabaseClient) {
       priority?: number | undefined;
       assigneeId?: string | null | undefined;
       parentIssueId?: string | null | undefined;
+      dueAt?: string | null | undefined;
       labelIds?: string[] | undefined;
     },
     metadata: Metadata,
@@ -368,6 +370,7 @@ export function createIssuesService(database: DatabaseClient) {
           createdBy: actorId,
           startedAt: state.category === 'started' ? new Date() : null,
           completedAt: state.category === 'completed' ? new Date() : null,
+          dueAt: input.dueAt ? new Date(input.dueAt) : null,
         })
         .returning();
       if (input.labelIds) await replaceLabels(tx, id, input.labelIds);
@@ -409,6 +412,7 @@ export function createIssuesService(database: DatabaseClient) {
         'priority',
         'assigneeId',
         'parentIssueId',
+        'dueAt',
       ] as const) {
         if (input[key] !== undefined && input[key] !== current[key]) changes[key] = input[key];
       }
@@ -422,6 +426,8 @@ export function createIssuesService(database: DatabaseClient) {
           priority: input.priority,
           assigneeId: input.assigneeId,
           parentIssueId: input.parentIssueId,
+          dueAt:
+            input.dueAt !== undefined ? (input.dueAt ? new Date(input.dueAt) : null) : undefined,
           revision: current.revision + 1,
           ...(state ? stateTimestamps(state.category, current) : {}),
         })

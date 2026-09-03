@@ -80,12 +80,17 @@ export function NewIssueDialog({
     priority,
     assigneeId,
     parentIssueId: parentIssueId ?? null,
-    labels: selectedLabels.map((l) => ({ id: l!.id, name: l!.name, color: l!.color })),
+    labels: selectedLabels.map((l) => ({
+      id: l!.id,
+      name: l!.name,
+      color: l!.color,
+    })),
     revision: 0,
     sortKey: '',
     completedAt: null,
     startedAt: null,
     archivedAt: null,
+    dueAt: null,
     workspaceId: '',
     createdAt: '',
     updatedAt: '',
@@ -93,7 +98,10 @@ export function NewIssueDialog({
 
   const doCreate = (openAfter: boolean) => {
     if (!title.trim()) return;
-    const body: Parameters<typeof create.mutate>[0] = { projectId, title: title.trim() };
+    const body: Parameters<typeof create.mutate>[0] = {
+      projectId,
+      title: title.trim(),
+    };
     if (description.trim()) body.description = description.trim();
     if (stateId) body.stateId = stateId;
     if (priority !== 0) body.priority = priority;
@@ -104,7 +112,11 @@ export function NewIssueDialog({
     create.mutate(body, {
       onSuccess: (issue) => {
         onOpenChange(false);
-        if (openAfter) void navigate({ to: '/issues/$issueId', params: { issueId: issue.id } });
+        if (openAfter)
+          void navigate({
+            to: '/issues/$issueId',
+            params: { issueId: issue.id },
+          });
       },
       onError: () => toast('Could not create the issue.'),
     });

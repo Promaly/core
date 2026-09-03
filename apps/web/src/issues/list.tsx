@@ -462,6 +462,19 @@ function Row({
         ))}
       </div>
 
+      {issue.dueAt && (
+        <span
+          className={[
+            'hidden shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium md:block',
+            new Date(issue.dueAt) < new Date()
+              ? 'bg-destructive/10 text-destructive'
+              : 'bg-secondary text-faint',
+          ].join(' ')}
+        >
+          {issue.dueAt.slice(0, 10)}
+        </span>
+      )}
+
       <PriorityPicker
         issue={issue}
         onPick={(priority) => onPatch(issue, { priority })}
