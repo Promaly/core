@@ -297,6 +297,7 @@ export const issues = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    dueAt: timestamp('due_at', { withTimezone: true }),
     searchTsv: tsvector('search_tsv').generatedAlwaysAs(
       sql`to_tsvector('english', coalesce("title", '') || ' ' || coalesce("description", ''))`,
     ),
