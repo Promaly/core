@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import {
   Button,
   Dialog,
@@ -14,16 +14,16 @@ import {
   Textarea,
   toast,
   type Priority,
-} from "@promaly/ui";
-import { PRIORITY_NAMES, useIssueContext } from "./context.js";
-import { useCreateIssue } from "./data.js";
+} from '@promaly/ui';
+import { PRIORITY_NAMES, useIssueContext } from './context.js';
+import { useCreateIssue } from './data.js';
 import {
   AssigneeAvatar,
   AssigneePicker,
   LabelPicker,
   PriorityPicker,
   StatePicker,
-} from "./pickers.js";
+} from './pickers.js';
 
 export function NewIssueDialog({
   open,
@@ -42,9 +42,9 @@ export function NewIssueDialog({
   const create = useCreateIssue();
   const navigate = useNavigate();
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [stateId, setStateId] = useState(defaultStateId ?? "");
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [stateId, setStateId] = useState(defaultStateId ?? '');
   const [priority, setPriority] = useState<number>(0);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [labelIds, setLabelIds] = useState<string[]>([]);
@@ -54,35 +54,28 @@ export function NewIssueDialog({
   const project = context.projectsById.get(projectId);
   const states = context.statesForProject(project);
   const currentState = states.find((s) => s.id === stateId);
-  const selectedLabels = labelIds
-    .map((id) => context.labelsById.get(id))
-    .filter(Boolean);
-  const allLabels = context.allLabels.filter(
-    (l) => !l.projectId || l.projectId === projectId,
-  );
+  const selectedLabels = labelIds.map((id) => context.labelsById.get(id)).filter(Boolean);
+  const allLabels = context.allLabels.filter((l) => !l.projectId || l.projectId === projectId);
 
   useEffect(() => {
     if (!open) return;
-    setTitle("");
-    setDescription("");
+    setTitle('');
+    setDescription('');
     setPriority(0);
     setAssigneeId(null);
     setLabelIds([]);
     const initial =
-      defaultStateId ??
-      states.find((s) => s.category === "unstarted")?.id ??
-      states[0]?.id ??
-      "";
+      defaultStateId ?? states.find((s) => s.category === 'unstarted')?.id ?? states[0]?.id ?? '';
     setStateId(initial);
     setTimeout(() => titleRef.current?.focus(), 0);
   }, [open]);
 
   const placeholderIssue = {
-    id: "",
+    id: '',
     projectId,
     number: 0,
-    title: "",
-    description: "",
+    title: '',
+    description: '',
     stateId,
     priority,
     assigneeId,
@@ -93,14 +86,14 @@ export function NewIssueDialog({
       color: l!.color,
     })),
     revision: 0,
-    sortKey: "",
+    sortKey: '',
     completedAt: null,
     startedAt: null,
     archivedAt: null,
     dueAt: null,
-    workspaceId: "",
-    createdAt: "",
-    updatedAt: "",
+    workspaceId: '',
+    createdAt: '',
+    updatedAt: '',
   };
 
   const doCreate = (openAfter: boolean) => {
@@ -121,11 +114,11 @@ export function NewIssueDialog({
         onOpenChange(false);
         if (openAfter)
           void navigate({
-            to: "/issues/$issueId",
+            to: '/issues/$issueId',
             params: { issueId: issue.id },
           });
       },
-      onError: () => toast("Could not create the issue."),
+      onError: () => toast('Could not create the issue.'),
     });
   };
 
@@ -134,7 +127,7 @@ export function NewIssueDialog({
       <DialogContent
         className="flex max-h-[90vh] w-full max-w-[560px] flex-col gap-0 p-0"
         onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
             e.preventDefault();
             doCreate(false);
           }
@@ -142,7 +135,7 @@ export function NewIssueDialog({
       >
         <DialogHeader className="border-b border-border px-4 py-3">
           <DialogTitle className="text-[14px]">
-            {parentIssueId ? "Create sub-issue" : "New issue"}
+            {parentIssueId ? 'Create sub-issue' : 'New issue'}
           </DialogTitle>
         </DialogHeader>
 
@@ -173,12 +166,10 @@ export function NewIssueDialog({
                   className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[12px] hover:bg-secondary"
                 >
                   <StateIcon
-                    category={currentState?.category ?? "unstarted"}
+                    category={currentState?.category ?? 'unstarted'}
                     color={currentState?.color}
                   />
-                  <span className="text-muted-foreground">
-                    {currentState?.name ?? "Status"}
-                  </span>
+                  <span className="text-muted-foreground">{currentState?.name ?? 'Status'}</span>
                 </button>
               }
             />
@@ -192,9 +183,7 @@ export function NewIssueDialog({
                   className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[12px] hover:bg-secondary"
                 >
                   <PriorityIcon value={priority as Priority} />
-                  <span className="text-muted-foreground">
-                    {PRIORITY_NAMES[priority]}
-                  </span>
+                  <span className="text-muted-foreground">{PRIORITY_NAMES[priority]}</span>
                 </button>
               }
             />
@@ -208,11 +197,9 @@ export function NewIssueDialog({
                   type="button"
                   className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[12px] hover:bg-secondary"
                 >
-                  <AssigneeAvatar
-                    email={context.member(assigneeId)?.email ?? null}
-                  />
+                  <AssigneeAvatar email={context.member(assigneeId)?.email ?? null} />
                   <span className="text-muted-foreground">
-                    {assigneeId ? context.memberName(assigneeId) : "Assignee"}
+                    {assigneeId ? context.memberName(assigneeId) : 'Assignee'}
                   </span>
                 </button>
               }
@@ -224,9 +211,7 @@ export function NewIssueDialog({
                 labels={allLabels}
                 onToggle={(labelId, active) => {
                   setLabelIds((prev) =>
-                    active
-                      ? prev.filter((id) => id !== labelId)
-                      : [...prev, labelId],
+                    active ? prev.filter((id) => id !== labelId) : [...prev, labelId],
                   );
                 }}
                 asChild={
@@ -243,8 +228,7 @@ export function NewIssueDialog({
             {selectedLabels.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {selectedLabels.map(
-                  (l) =>
-                    l && <LabelChip key={l.id} name={l.name} color={l.color} />,
+                  (l) => l && <LabelChip key={l.id} name={l.name} color={l.color} />,
                 )}
               </div>
             )}
