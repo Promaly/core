@@ -7,8 +7,8 @@ let csrfToken: string | undefined;
 
 export async function getCsrfToken() {
   if (csrfToken) return csrfToken;
-  const response = await fetch("/v1/auth/csrf", { credentials: "include" });
-  if (!response.ok) throw new Error("Unable to start a secure session.");
+  const response = await fetch('/v1/auth/csrf', { credentials: 'include' });
+  if (!response.ok) throw new Error('Unable to start a secure session.');
   csrfToken = ((await response.json()) as { csrfToken: string }).csrfToken;
   return csrfToken;
 }
@@ -35,23 +35,19 @@ type RequestOptions = {
   signal?: AbortSignal;
 };
 
-export async function api<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<T> {
+export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers();
-  if (options.csrf) headers.set("x-csrf-token", await getCsrfToken());
-  if (options.workspaceId) headers.set("x-workspace-id", options.workspaceId);
-  if (options.ifMatch !== undefined)
-    headers.set("if-match", String(options.ifMatch));
+  if (options.csrf) headers.set('x-csrf-token', await getCsrfToken());
+  if (options.workspaceId) headers.set('x-workspace-id', options.workspaceId);
+  if (options.ifMatch !== undefined) headers.set('if-match', String(options.ifMatch));
   const init: RequestInit = {
-    method: options.method ?? "GET",
+    method: options.method ?? 'GET',
     headers,
-    credentials: "include",
+    credentials: 'include',
   };
   if (options.signal) init.signal = options.signal;
   if (options.body !== undefined) {
-    headers.set("content-type", "application/json");
+    headers.set('content-type', 'application/json');
     init.body = JSON.stringify(options.body);
   }
   const response = await fetch(path, init);
@@ -59,52 +55,47 @@ export async function api<T>(
     const detail = (await response.json().catch(() => ({}))) as {
       error?: string;
     };
-    throw new ApiError(
-      detail.error ?? `Request failed (${response.status}).`,
-      response.status,
-    );
+    throw new ApiError(detail.error ?? `Request failed (${response.status}).`, response.status);
   }
-  return response.status === 204
-    ? (undefined as T)
-    : (response.json() as Promise<T>);
+  return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
 }
 
 export const authApi = {
-  session: () => api<Session>("/v1/auth/me"),
+  session: () => api<Session>('/v1/auth/me'),
   login: (email: string, password: string) =>
-    api<Session>("/v1/auth/login", {
-      method: "POST",
+    api<Session>('/v1/auth/login', {
+      method: 'POST',
       body: { email, password },
       csrf: true,
     }),
   register: (email: string, password: string, workspaceName: string) =>
-    api<Session>("/v1/auth/register", {
-      method: "POST",
+    api<Session>('/v1/auth/register', {
+      method: 'POST',
       body: { email, password, workspaceName },
       csrf: true,
     }),
-  logout: () => api<void>("/v1/auth/logout", { method: "POST", csrf: true }),
+  logout: () => api<void>('/v1/auth/logout', { method: 'POST', csrf: true }),
   requestReset: (email: string) =>
-    api<void>("/v1/auth/password-reset", {
-      method: "POST",
+    api<void>('/v1/auth/password-reset', {
+      method: 'POST',
       body: { email },
       csrf: true,
     }),
   confirmReset: (token: string, password: string) =>
     api<void>(`/v1/auth/password-reset/${token}`, {
-      method: "POST",
+      method: 'POST',
       body: { password },
       csrf: true,
     }),
   acceptInvite: (token: string, password: string) =>
     api<Session>(`/v1/invitations/${token}/accept`, {
-      method: "POST",
+      method: 'POST',
       body: { password },
       csrf: true,
     }),
   createWorkspace: (name: string) =>
-    api<{ id: string; name: string; slug: string }>("/v1/workspaces", {
-      method: "POST",
+    api<{ id: string; name: string; slug: string }>('/v1/workspaces', {
+      method: 'POST',
       body: { name },
       csrf: true,
     }),
@@ -114,9 +105,8 @@ export const authApi = {
 // Shared types
 // ---------------------------------------------------------------------------
 
-export type StateCategory =
-  "backlog" | "unstarted" | "started" | "completed" | "cancelled";
-export type CoreRole = "owner" | "admin" | "member" | "guest";
+export type StateCategory = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
+export type CoreRole = 'owner' | 'admin' | 'member' | 'guest';
 
 export type Page<T> = { items: T[]; nextCursor: string | null };
 
@@ -217,7 +207,7 @@ export type IssueRelation = {
   id: string;
   sourceIssueId: string;
   targetIssueId: string;
-  type: "blocks" | "relates_to" | "duplicates";
+  type: 'blocks' | 'relates_to' | 'duplicates';
 };
 
 export type SearchHit = {
@@ -242,8 +232,8 @@ export type IssueListParams = {
   priority?: number[] | undefined;
   parentId?: string | undefined;
   q?: string | undefined;
-  sort?: "manual" | "priority" | "updated" | "created" | undefined;
-  groupBy?: "state" | "assignee" | "priority" | "label" | "none" | undefined;
+  sort?: 'manual' | 'priority' | 'updated' | 'created' | undefined;
+  groupBy?: 'state' | 'assignee' | 'priority' | 'label' | 'none' | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
 };
@@ -352,21 +342,21 @@ function qs(params: IssueListParams): string {
   const search = new URLSearchParams();
   const put = (key: string, value: unknown) => {
     if (value === undefined || value === null) return;
-    search.set(key, Array.isArray(value) ? value.join(",") : String(value));
+    search.set(key, Array.isArray(value) ? value.join(',') : String(value));
   };
-  put("projectId", params.projectId);
-  put("stateId", params.stateId);
-  put("assigneeId", params.assigneeId);
-  put("labelId", params.labelId);
-  put("priority", params.priority);
-  put("parentId", params.parentId);
-  put("q", params.q);
-  put("sort", params.sort);
-  put("groupBy", params.groupBy);
-  put("cursor", params.cursor);
-  put("limit", params.limit);
+  put('projectId', params.projectId);
+  put('stateId', params.stateId);
+  put('assigneeId', params.assigneeId);
+  put('labelId', params.labelId);
+  put('priority', params.priority);
+  put('parentId', params.parentId);
+  put('q', params.q);
+  put('sort', params.sort);
+  put('groupBy', params.groupBy);
+  put('cursor', params.cursor);
+  put('limit', params.limit);
   const string = search.toString();
-  return string ? `?${string}` : "";
+  return string ? `?${string}` : '';
 }
 
 // ---------------------------------------------------------------------------
@@ -375,99 +365,92 @@ function qs(params: IssueListParams): string {
 
 /** Workspace-scoped API bound to one workspace id (sent as `X-Workspace-Id`). */
 export function workspaceApi(workspaceId: string) {
-  const scoped = <T>(
-    path: string,
-    options: Omit<RequestOptions, "workspaceId"> = {},
-  ) => api<T>(path, { ...options, workspaceId });
+  const scoped = <T>(path: string, options: Omit<RequestOptions, 'workspaceId'> = {}) =>
+    api<T>(path, { ...options, workspaceId });
 
   return {
     // --- Workspace settings -------------------------------------------------
 
     updateWorkspace: (patch: { name?: string; slug?: string }) =>
       scoped<Workspace>(`/v1/workspaces/${workspaceId}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: patch,
         csrf: true,
       }),
     deleteWorkspace: () =>
       scoped<void>(`/v1/workspaces/${workspaceId}`, {
-        method: "DELETE",
+        method: 'DELETE',
         csrf: true,
       }),
     leaveWorkspace: () =>
       scoped<void>(`/v1/workspaces/${workspaceId}/leave`, {
-        method: "POST",
+        method: 'POST',
         csrf: true,
       }),
 
     // --- Members ------------------------------------------------------------
 
-    listMembers: () => scoped<Member[]>("/v1/members"),
+    listMembers: () => scoped<Member[]>('/v1/members'),
     updateMemberRole: (accountId: string, role: CoreRole) =>
       scoped<void>(`/v1/members/${accountId}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: { role },
         csrf: true,
       }),
     removeMember: (accountId: string) =>
       scoped<void>(`/v1/members/${accountId}`, {
-        method: "DELETE",
+        method: 'DELETE',
         csrf: true,
       }),
 
     // --- Invitations --------------------------------------------------------
 
-    listInvitations: () => scoped<Invitation[]>("/v1/invitations"),
-    createInvitation: (email: string, role: Exclude<CoreRole, "owner">) =>
-      scoped<Invitation>("/v1/invitations", {
-        method: "POST",
+    listInvitations: () => scoped<Invitation[]>('/v1/invitations'),
+    createInvitation: (email: string, role: Exclude<CoreRole, 'owner'>) =>
+      scoped<Invitation>('/v1/invitations', {
+        method: 'POST',
         body: { email, role },
         csrf: true,
       }),
     revokeInvitation: (id: string) =>
-      scoped<void>(`/v1/invitations/${id}`, { method: "DELETE", csrf: true }),
+      scoped<void>(`/v1/invitations/${id}`, { method: 'DELETE', csrf: true }),
 
     // --- Teams --------------------------------------------------------------
 
     listTeams: (cursor?: string) =>
-      scoped<Page<Team>>(`/v1/teams${cursor ? `?cursor=${cursor}` : ""}`),
+      scoped<Page<Team>>(`/v1/teams${cursor ? `?cursor=${cursor}` : ''}`),
     getTeam: (id: string) => scoped<Team>(`/v1/teams/${id}`),
     createTeam: (body: { name: string; key: string }) =>
-      scoped<Team>("/v1/teams", { method: "POST", body, csrf: true }),
+      scoped<Team>('/v1/teams', { method: 'POST', body, csrf: true }),
     updateTeam: (id: string, patch: { name?: string; key?: string }) =>
       scoped<Team>(`/v1/teams/${id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: patch,
         csrf: true,
       }),
-    deleteTeam: (id: string) =>
-      scoped<void>(`/v1/teams/${id}`, { method: "DELETE", csrf: true }),
-    listTeamMembers: (teamId: string) =>
-      scoped<TeamMember[]>(`/v1/teams/${teamId}/members`),
+    deleteTeam: (id: string) => scoped<void>(`/v1/teams/${id}`, { method: 'DELETE', csrf: true }),
+    listTeamMembers: (teamId: string) => scoped<TeamMember[]>(`/v1/teams/${teamId}/members`),
     addTeamMember: (teamId: string, accountId: string) =>
       scoped<void>(`/v1/teams/${teamId}/members`, {
-        method: "POST",
+        method: 'POST',
         body: { accountId },
         csrf: true,
       }),
     removeTeamMember: (teamId: string, accountId: string) =>
       scoped<void>(`/v1/teams/${teamId}/members/${accountId}`, {
-        method: "DELETE",
+        method: 'DELETE',
         csrf: true,
       }),
 
     // --- Workflows & states -------------------------------------------------
 
-    listWorkflows: () => scoped<{ items: Workflow[] }>("/v1/workflows"),
+    listWorkflows: () => scoped<{ items: Workflow[] }>('/v1/workflows'),
     getWorkflow: (id: string) => scoped<Workflow>(`/v1/workflows/${id}`),
     createWorkflow: (body: { name: string; isDefault?: boolean }) =>
-      scoped<Workflow>("/v1/workflows", { method: "POST", body, csrf: true }),
-    updateWorkflow: (
-      id: string,
-      patch: { name?: string; isDefault?: boolean },
-    ) =>
+      scoped<Workflow>('/v1/workflows', { method: 'POST', body, csrf: true }),
+    updateWorkflow: (id: string, patch: { name?: string; isDefault?: boolean }) =>
       scoped<Workflow>(`/v1/workflows/${id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: patch,
         csrf: true,
       }),
@@ -476,7 +459,7 @@ export function workspaceApi(workspaceId: string) {
       body: { name: string; category: StateCategory; color: string },
     ) =>
       scoped<WorkflowState>(`/v1/workflows/${workflowId}/states`, {
-        method: "POST",
+        method: 'POST',
         body,
         csrf: true,
       }),
@@ -486,39 +469,38 @@ export function workspaceApi(workspaceId: string) {
       patch: { name?: string; color?: string },
     ) =>
       scoped<WorkflowState>(`/v1/workflows/${workflowId}/states/${stateId}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: patch,
         csrf: true,
       }),
     deleteWorkflowState: (workflowId: string, stateId: string) =>
       scoped<void>(`/v1/workflows/${workflowId}/states/${stateId}`, {
-        method: "DELETE",
+        method: 'DELETE',
         csrf: true,
       }),
     reorderWorkflowStates: (workflowId: string, stateIds: string[]) =>
       scoped<void>(`/v1/workflows/${workflowId}/states/reorder`, {
-        method: "POST",
+        method: 'POST',
         body: { stateIds },
         csrf: true,
       }),
 
     // --- Labels -------------------------------------------------------------
 
-    listLabels: () => scoped<{ items: Label[] }>("/v1/labels"),
+    listLabels: () => scoped<{ items: Label[] }>('/v1/labels'),
     createLabel: (body: { name: string; color: string; projectId?: string }) =>
-      scoped<Label>("/v1/labels", { method: "POST", body, csrf: true }),
+      scoped<Label>('/v1/labels', { method: 'POST', body, csrf: true }),
     updateLabel: (id: string, patch: { name?: string; color?: string }) =>
       scoped<Label>(`/v1/labels/${id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: patch,
         csrf: true,
       }),
-    deleteLabel: (id: string) =>
-      scoped<void>(`/v1/labels/${id}`, { method: "DELETE", csrf: true }),
+    deleteLabel: (id: string) => scoped<void>(`/v1/labels/${id}`, { method: 'DELETE', csrf: true }),
 
     // --- Projects -----------------------------------------------------------
 
-    listProjects: () => scoped<{ items: Project[] }>("/v1/projects"),
+    listProjects: () => scoped<{ items: Project[] }>('/v1/projects'),
     createProject: (body: {
       key: string;
       name: string;
@@ -528,7 +510,7 @@ export function workspaceApi(workspaceId: string) {
       workflowId?: string;
       icon?: string;
       color?: string;
-    }) => scoped<Project>("/v1/projects", { method: "POST", body, csrf: true }),
+    }) => scoped<Project>('/v1/projects', { method: 'POST', body, csrf: true }),
     updateProject: (
       id: string,
       patch: {
@@ -542,38 +524,34 @@ export function workspaceApi(workspaceId: string) {
       },
     ) =>
       scoped<Project>(`/v1/projects/${id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: patch,
         csrf: true,
       }),
     archiveProject: (id: string) =>
       scoped<Project>(`/v1/projects/${id}/archive`, {
-        method: "POST",
+        method: 'POST',
         csrf: true,
       }),
     unarchiveProject: (id: string) =>
       scoped<Project>(`/v1/projects/${id}/unarchive`, {
-        method: "POST",
+        method: 'POST',
         csrf: true,
       }),
 
     // --- Issues -------------------------------------------------------------
 
     listIssues: (params: IssueListParams, signal?: AbortSignal) =>
-      scoped<IssueListResult>(
-        `/v1/issues${qs(params)}`,
-        signal ? { signal } : {},
-      ),
+      scoped<IssueListResult>(`/v1/issues${qs(params)}`, signal ? { signal } : {}),
     getIssue: (id: string) => scoped<Issue>(`/v1/issues/${id}`),
     searchIssues: (q: string) =>
       scoped<SearchHit[]>(`/v1/search/issues?q=${encodeURIComponent(q)}`),
-    listSubIssues: (id: string) =>
-      scoped<{ items: Issue[] }>(`/v1/issues/${id}/subissues`),
+    listSubIssues: (id: string) => scoped<{ items: Issue[] }>(`/v1/issues/${id}/subissues`),
     createIssue: (body: { projectId: string; title: string } & IssuePatch) =>
-      scoped<Issue>("/v1/issues", { method: "POST", body, csrf: true }),
+      scoped<Issue>('/v1/issues', { method: 'POST', body, csrf: true }),
     updateIssue: (id: string, revision: number, patch: IssuePatch) =>
       scoped<Issue>(`/v1/issues/${id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: patch,
         csrf: true,
         ifMatch: revision,
@@ -584,34 +562,33 @@ export function workspaceApi(workspaceId: string) {
       destination: { beforeId?: string; afterId?: string; stateId?: string },
     ) =>
       scoped<Issue>(`/v1/issues/${id}/move`, {
-        method: "POST",
+        method: 'POST',
         body: destination,
         csrf: true,
         ifMatch: revision,
       }),
     bulkUpdate: (issues: BulkItem[]) =>
-      scoped<BulkResult>("/v1/issues/bulk", {
-        method: "POST",
+      scoped<BulkResult>('/v1/issues/bulk', {
+        method: 'POST',
         body: { issues },
         csrf: true,
       }),
 
     // --- Relations ----------------------------------------------------------
 
-    listRelations: (issueId: string) =>
-      scoped<IssueRelation[]>(`/v1/issues/${issueId}/relations`),
+    listRelations: (issueId: string) => scoped<IssueRelation[]>(`/v1/issues/${issueId}/relations`),
     createRelation: (
       issueId: string,
-      body: { targetIssueId: string; type: IssueRelation["type"] },
+      body: { targetIssueId: string; type: IssueRelation['type'] },
     ) =>
       scoped<IssueRelation>(`/v1/issues/${issueId}/relations`, {
-        method: "POST",
+        method: 'POST',
         body,
         csrf: true,
       }),
     deleteRelation: (relationId: string) =>
       scoped<void>(`/v1/relations/${relationId}`, {
-        method: "DELETE",
+        method: 'DELETE',
         csrf: true,
       }),
 
@@ -619,60 +596,53 @@ export function workspaceApi(workspaceId: string) {
 
     listComments: (issueId: string) =>
       scoped<{ items: Comment[] }>(`/v1/issues/${issueId}/comments`),
-    createComment: (
-      issueId: string,
-      body: { body: string; mentionIds?: string[] },
-    ) =>
+    createComment: (issueId: string, body: { body: string; mentionIds?: string[] }) =>
       scoped<Comment>(`/v1/issues/${issueId}/comments`, {
-        method: "POST",
+        method: 'POST',
         body,
         csrf: true,
       }),
     updateComment: (id: string, patch: { body: string }) =>
       scoped<Comment>(`/v1/comments/${id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: patch,
         csrf: true,
       }),
     deleteComment: (id: string) =>
-      scoped<void>(`/v1/comments/${id}`, { method: "DELETE", csrf: true }),
+      scoped<void>(`/v1/comments/${id}`, { method: 'DELETE', csrf: true }),
 
     // --- Timeline (Wave A) --------------------------------------------------
 
     listTimeline: (issueId: string, cursor?: string) =>
       scoped<Page<ActivityEvent>>(
-        `/v1/issues/${issueId}/timeline${cursor ? `?cursor=${cursor}` : ""}`,
+        `/v1/issues/${issueId}/timeline${cursor ? `?cursor=${cursor}` : ''}`,
       ),
 
     // --- Notifications (Wave A) ---------------------------------------------
 
-    listNotifications: (params?: {
-      status?: "unread" | "read" | "all";
-      cursor?: string;
-    }) => {
+    listNotifications: (params?: { status?: 'unread' | 'read' | 'all'; cursor?: string }) => {
       const search = new URLSearchParams();
-      if (params?.status) search.set("status", params.status);
-      if (params?.cursor) search.set("cursor", params.cursor);
+      if (params?.status) search.set('status', params.status);
+      if (params?.cursor) search.set('cursor', params.cursor);
       const q = search.toString();
-      return scoped<Page<Notification>>(`/v1/notifications${q ? `?${q}` : ""}`);
+      return scoped<Page<Notification>>(`/v1/notifications${q ? `?${q}` : ''}`);
     },
-    getUnreadCount: () =>
-      scoped<{ count: number }>("/v1/notifications/unread-count"),
+    getUnreadCount: () => scoped<{ count: number }>('/v1/notifications/unread-count'),
     markNotificationRead: (id: string) =>
       scoped<void>(`/v1/notifications/${id}/read`, {
-        method: "POST",
+        method: 'POST',
         csrf: true,
       }),
     markAllNotificationsRead: () =>
-      scoped<void>("/v1/notifications/read-all", {
-        method: "POST",
+      scoped<void>('/v1/notifications/read-all', {
+        method: 'POST',
         csrf: true,
       }),
     getNotificationPreferences: () =>
-      scoped<NotificationPreferences>("/v1/notification-preferences"),
+      scoped<NotificationPreferences>('/v1/notification-preferences'),
     updateNotificationPreferences: (patch: Partial<NotificationPreferences>) =>
-      scoped<NotificationPreferences>("/v1/notification-preferences", {
-        method: "PATCH",
+      scoped<NotificationPreferences>('/v1/notification-preferences', {
+        method: 'PATCH',
         body: patch,
         csrf: true,
       }),
@@ -685,20 +655,20 @@ export function workspaceApi(workspaceId: string) {
       scoped<{ items: Attachment[] }>(`/v1/comments/${commentId}/attachments`),
     attachmentDownloadUrl: (id: string) => `/v1/attachments/${id}/download`,
     deleteAttachment: (id: string) =>
-      scoped<void>(`/v1/attachments/${id}`, { method: "DELETE", csrf: true }),
+      scoped<void>(`/v1/attachments/${id}`, { method: 'DELETE', csrf: true }),
 
     // --- Saved views (Wave A) -----------------------------------------------
 
-    listSavedViews: () => scoped<{ items: SavedView[] }>("/v1/saved-views"),
+    listSavedViews: () => scoped<{ items: SavedView[] }>('/v1/saved-views'),
     createSavedView: (body: {
       name: string;
-      scope: "personal" | "shared";
+      scope: 'personal' | 'shared';
       filters: SavedViewFilters;
       groupBy?: string;
       sort?: string;
     }) =>
-      scoped<SavedView>("/v1/saved-views", {
-        method: "POST",
+      scoped<SavedView>('/v1/saved-views', {
+        method: 'POST',
         body,
         csrf: true,
       }),
@@ -712,12 +682,12 @@ export function workspaceApi(workspaceId: string) {
       },
     ) =>
       scoped<SavedView>(`/v1/saved-views/${id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: patch,
         csrf: true,
       }),
     deleteSavedView: (id: string) =>
-      scoped<void>(`/v1/saved-views/${id}`, { method: "DELETE", csrf: true }),
+      scoped<void>(`/v1/saved-views/${id}`, { method: 'DELETE', csrf: true }),
   };
 }
 
