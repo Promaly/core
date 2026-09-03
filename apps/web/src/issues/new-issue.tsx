@@ -91,6 +91,7 @@ export function NewIssueDialog({
     startedAt: null,
     archivedAt: null,
     dueAt: null,
+    estimate: null,
     workspaceId: '',
     createdAt: '',
     updatedAt: '',
