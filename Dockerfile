@@ -53,6 +53,9 @@ COPY --from=build /app/packages/domain/dist packages/domain/dist
 COPY --from=build /app/packages/sdk/dist packages/sdk/dist
 COPY --from=build /app/packages/ui/dist packages/ui/dist
 
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
+
 EXPOSE 3000
 USER node
-CMD ["node", "apps/api/dist/main.js"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
